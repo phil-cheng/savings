@@ -945,6 +945,84 @@
       }
     }
 
+    /** 补齐缺省字段，避免旧数据缺键 */
+    function normalizeData(data) {
+      const next = data && typeof data === 'object' ? data : {};
+      next.version = next.version || 1;
+      next.jars = next.jars || {};
+      for (const k of JAR_KEYS) {
+        if (!next.jars[k]) {
+          next.jars[k] = { name: JAR_META[k].name, amount: 0 };
+        } else {
+          next.jars[k].amount = Number(next.jars[k].amount) || 0;
+          if (!next.jars[k].name) next.jars[k].name = JAR_META[k].name;
+        }
+      }
+      next.logs = Array.isArray(next.logs) ? next.logs : [];
+      next.weeklyRecords = Array.isArray(next.weeklyRecords) ? next.weeklyRecords : [];
+      next.achievements = Array.isArray(next.achievements) ? next.achievements : [];
+      return next;
+    }
+
+    function jarAmountsKey(data) {
+      if (!data || !data.jars) return '';
+      return JAR_KEYS.map((k) => String(Number(data.jars[k]?.amount) || 0)).join('|');
+    }
+
+    function logsSig(data) {
+      const logs = data?.logs || [];
+      if (!logs.length) return '0';
+      const last = logs[logs.length - 1];
+      return logs.length + ':' + (last?.id || '') + ':' + (last?.at || '');
+    }
+
+    /**
+     * 从本机服务拉取最新 data.json，覆盖内存 state
+     * 多端场景下，写操作前必须调用，避免用旧余额累加后覆盖新数据
+     * @returns {{ changed: boolean, changedKeys: string[] }}
+     */
+    async function syncFromServer(opts = {}) {
+      const remote = normalizeData(await loadData());
+      const prev = state;
+      const changedKeys = [];
+
+      if (prev && prev.jars) {
+        for (const k of JAR_KEYS) {
+          const a = Number(prev.jars[k]?.amount) || 0;
+          const b = Number(remote.jars[k]?.amount) || 0;
+          if (a !== b) changedKeys.push(k);
+        }
+      }
+
+      const amountsChanged = changedKeys.length > 0;
+      const metaChanged =
+        !prev ||
+        logsSig(prev) !== logsSig(remote) ||
+        (prev.weeklyRecords?.length || 0) !== (remote.weeklyRecords?.length || 0);
+
+      state = remote;
+
+      // 已有 DOM 时按需刷新展示
+      if (levelAnim.built && (amountsChanged || metaChanged || opts.forceRender)) {
+        if (amountsChanged) {
+          renderJars({
+            animateKeys: opts.instant ? undefined : changedKeys,
+            instant: !!opts.instant,
+          });
+        }
+        if (metaChanged || amountsChanged) {
+          renderLogs();
+          renderWeekly();
+        }
+      }
+
+      if (opts.notifyIfChanged && amountsChanged) {
+        showToast('已同步其它设备的最新数据', 'ok', 1800);
+      }
+
+      return { changed: amountsChanged || metaChanged, changedKeys };
+    }
+
     function uid(prefix) {
       return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
     }
@@ -1603,16 +1681,34 @@
         return;
       }
       if (saving) return;
+      saving = true;
+
+      // 操作前先拉服务端最新账本，避免 PC 用旧余额覆盖手机刚改的数据
+      let staleLocal = null;
+      try {
+        staleLocal = state ? jarAmountsKey(state) : null;
+        await syncFromServer({ notifyIfChanged: false });
+      } catch (e) {
+        saving = false;
+        showToast('同步失败，未修改：' + (e.message || e), 'err');
+        return;
+      }
 
       const jar = state.jars[key];
       const before = Number(jar.amount) || 0;
       const after = Math.round((before + delta) * 100) / 100;
       if (after < 0) {
+        saving = false;
         setStatus('余额不能为负', 'err');
         return;
       }
 
-      // 乐观更新
+      // 本地展示余额与服务端不一致时，提示已按最新值计算
+      if (staleLocal != null && staleLocal !== jarAmountsKey(state)) {
+        showToast(`已按最新余额计算（当前 ${formatMoney(before)}）`, 'ok', 2000);
+      }
+
+      // 在最新数据上累加后再写回
       jar.amount = after;
       state.logs = state.logs || [];
       state.logs.push({
@@ -1624,19 +1720,19 @@
         note: note || '',
       });
 
-      // 只动画当前罐的水位；日志立即刷新
       renderJars({ animateKeys: [key] });
       renderLogs();
-      saving = true;
       try {
         await saveData(state);
         showToast('已保存', 'ok', 1400);
       } catch (e) {
-        // 回滚并再播一遍水位动画
-        jar.amount = before;
-        state.logs.pop();
-        renderJars({ animateKeys: [key] });
-        renderLogs();
+        // 保存失败：重新从服务端拉回真相，避免本地脏状态
+        try {
+          await syncFromServer({ forceRender: true, notifyIfChanged: false });
+          renderAll({ animateKeys: [key] });
+        } catch (_) {
+          /* ignore */
+        }
         showToast('保存失败：' + e.message, 'err');
       } finally {
         saving = false;
@@ -1664,7 +1760,12 @@
       }
     });
 
-    $('btn-weekly').addEventListener('click', () => {
+    $('btn-weekly').addEventListener('click', async () => {
+      try {
+        await syncFromServer({ notifyIfChanged: true });
+      } catch (e) {
+        showToast('同步失败：' + (e.message || e), 'err');
+      }
       renderWeekly();
       weeklyDialog.showModal();
     });
@@ -1695,24 +1796,15 @@
 
     async function boot() {
       try {
-        state = await loadData();
-        // 规范化缺字段
-        state.logs = state.logs || [];
-        state.weeklyRecords = state.weeklyRecords || [];
-        state.achievements = state.achievements || [];
-        for (const k of JAR_KEYS) {
-          if (!state.jars[k]) {
-            state.jars[k] = { name: JAR_META[k].name, amount: 0 };
-          }
-        }
+        const firstPaint = !levelAnim.built;
+        await syncFromServer({ forceRender: false, notifyIfChanged: !firstPaint });
 
         const { settled, week } = ensureWeeklySettlement(state);
         if (settled) {
           await saveData(state);
           showToast(`已补记周结算：${week}`, 'ok', 2200);
         }
-        // 首次进入：水位从 0 按分层规则升到当前层内进度
-        const firstPaint = !levelAnim.built;
+
         if (firstPaint) {
           buildJars();
           updateScaleMarks();
@@ -1722,7 +1814,7 @@
             renderWeekly();
           });
         } else {
-          // 切回页面时同步数据，水位平滑过渡到最新值
+          // 切回前台：已用服务端数据刷新，有差异时 sync 内会提示
           renderAll({ animateKeys: JAR_KEYS.slice() });
         }
       } catch (e) {
@@ -1730,7 +1822,7 @@
       }
     }
 
-    // 页面重新可见时再检查一次结算 / 刷新数据
+    // 页面重新可见时同步最新数据 + 检查周结算
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') boot();
     });
