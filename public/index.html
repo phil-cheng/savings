@@ -786,7 +786,7 @@
             <th>消费</th>
             <th>爱心</th>
             <th>超级存钱罐</th>
-            <th>超级储蓄变动（比上周）</th>
+            <th>超级变动（比上周）</th>
             <th>总额</th>
             <th>总变动（比上周）</th>
             <th>结算日期</th>
@@ -1010,7 +1010,7 @@
       const thisSum = consumption + love + superAmt;
       // 总变动（比上周）= 本周三项之和 − 上周三项之和
       const change = prev ? thisSum - recordSum(prev) : null;
-      // 超级储蓄变动（比上周）= 本周超级 − 上周超级
+      // 超级变动（比上周）= 本周超级 − 上周超级
       const superChange = prev ? superAmt - (Number(prev.super) || 0) : null;
 
       data.weeklyRecords.push({
