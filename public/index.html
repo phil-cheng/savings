@@ -133,19 +133,108 @@
     .jar-title {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
+      align-items: flex-start;
       gap: 8px;
+      /* 固定标题区高度，避免层文案换行把罐子整体顶动 */
+      min-height: 3.4rem;
+    }
+    .jar-title-left {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
     }
     .jar-title h2 {
       margin: 0;
       font-size: 1.05rem;
       font-weight: 700;
+      line-height: 1.25;
     }
     .jar-amount {
       font-variant-numeric: tabular-nums;
       font-size: 1.15rem;
       font-weight: 700;
       color: var(--accent);
+      flex-shrink: 0;
+      line-height: 1.25;
+    }
+    /* 分层信息：固定两行，杜绝加减时高度抖动 */
+    .jar-layer {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      column-gap: 8px;
+      row-gap: 0;
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.35;
+      min-height: 1.35em;
+      width: 100%;
+    }
+    .jar-layer-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 3.6em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #f0e6d6;
+      color: var(--ink);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .jar-layer-badge.level-up-pop {
+      animation: level-badge-pop 0.65s cubic-bezier(0.34, 1.45, 0.64, 1);
+      background: #ffe0b8;
+      color: var(--accent);
+    }
+    @keyframes level-badge-pop {
+      0% { transform: scale(1); }
+      35% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+    .jar-layer-progress {
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    /* 整罐升级闪烁 */
+    .jar-card.leveling-up {
+      box-shadow: 0 0 0 2px rgba(196, 92, 38, 0.35), var(--shadow);
+    }
+    .jar-card.leveling-up .jar-tank {
+      animation: tank-glow 0.55s ease-in-out 2;
+    }
+    @keyframes tank-glow {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.12); }
+    }
+    .level-up-toast {
+      position: absolute;
+      left: 50%;
+      top: 42%;
+      transform: translate(-50%, -50%);
+      z-index: 5;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(44, 36, 22, 0.88);
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 700;
+      pointer-events: none;
+      white-space: nowrap;
+      animation: toast-float 1.1s ease-out forwards;
+    }
+    @keyframes toast-float {
+      0% { opacity: 0; transform: translate(-50%, -40%) scale(0.9); }
+      20% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+      70% { opacity: 1; transform: translate(-50%, -60%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -75%) scale(0.98); }
     }
 
     .jar-body {
@@ -315,6 +404,9 @@
       .jar-fill.sloshing .jar-wave { animation: none !important; }
       .jar-bubble { animation: none !important; display: none; }
       .jar-amount.pop { animation: none !important; }
+      .jar-layer-badge.level-up-pop { animation: none !important; }
+      .jar-card.leveling-up .jar-tank { animation: none !important; }
+      .level-up-toast { animation: none !important; opacity: 1; }
     }
 
     .controls {
@@ -370,6 +462,36 @@
     .panel h3 {
       margin: 0 0 12px;
       font-size: 1rem;
+    }
+
+    /* 操作日志筛选 Tab */
+    .log-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+    .log-tab {
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: #f7f1e6;
+      color: var(--muted);
+      border: 1px solid transparent;
+    }
+    .log-tab:hover {
+      background: #efe6d6;
+      color: var(--ink);
+    }
+    .log-tab[aria-selected="true"] {
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+    }
+    .log-tab:focus-visible {
+      outline: 2px solid rgba(196, 92, 38, 0.35);
+      outline-offset: 2px;
     }
 
     .log-list {
@@ -463,7 +585,7 @@
     <header>
       <div>
         <h1>三罐储蓄</h1>
-        <p>数据保存在本机服务 · 各设备操作实时回写</p>
+        <p>数据保存在本机服务 · 水位按「层」显示（每层 100 元）</p>
       </div>
       <div class="header-actions">
         <button type="button" class="btn" id="btn-logs-focus">操作日志</button>
@@ -477,6 +599,12 @@
 
     <section class="panel" id="logs-panel">
       <h3>操作日志</h3>
+      <div class="log-tabs" id="log-tabs" role="tablist" aria-label="按储蓄罐筛选日志">
+        <button type="button" class="log-tab" role="tab" data-filter="all" aria-selected="true">全部</button>
+        <button type="button" class="log-tab" role="tab" data-filter="consumption" aria-selected="false">消费</button>
+        <button type="button" class="log-tab" role="tab" data-filter="love" aria-selected="false">爱心</button>
+        <button type="button" class="log-tab" role="tab" data-filter="super" aria-selected="false">超级</button>
+      </div>
       <ul class="log-list" id="log-list"></ul>
     </section>
   </div>
@@ -510,24 +638,29 @@
      * - 从本机 API 读写整份 data.json
      * - 操作后立即 PUT 回写
      * - 每周日 20:00（上海时区）结算；打开页面时补算
+     * - 方案 A 分层：水位只映射「当前层内进度」，总额数字始终真实
      */
 
     const JAR_KEYS = ['consumption', 'love', 'super'];
+    /** layerSize：每层容量（元）。日常波动可见；大额只推高层数 */
     const JAR_META = {
-      consumption: { name: '消费储蓄罐', short: '消费' },
-      love: { name: '爱心储蓄罐', short: '爱心' },
-      super: { name: '超级存钱罐', short: '超级' },
+      consumption: { name: '消费储蓄罐', short: '消费', layerSize: 100 },
+      love: { name: '爱心储蓄罐', short: '爱心', layerSize: 100 },
+      super: { name: '超级存钱罐', short: '超级', layerSize: 100 },
     };
-    const QUICK = [10, 50, 100, 500];
+    const QUICK = [5, 10, 20, 30, 50];
 
     /** @type {any} */
     let state = null;
     let saving = false;
+    /** 操作日志筛选：all | consumption | love | super */
+    let logFilter = 'all';
 
     const $ = (id) => document.getElementById(id);
     const statusEl = $('status');
     const jarsEl = $('jars');
     const logListEl = $('log-list');
+    const logTabsEl = $('log-tabs');
     const weeklyDialog = $('weekly-dialog');
     const weeklyTbody = $('weekly-tbody');
     const weeklyEmpty = $('weekly-empty');
@@ -705,29 +838,40 @@
       return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
     }
 
-    /** 刻度上限：至少 1000，或当前最大金额向上取整到漂亮刻度 */
-    function scaleMax(data) {
-      const maxAmt = Math.max(0, ...JAR_KEYS.map((k) => Number(data.jars[k].amount) || 0));
-      if (maxAmt <= 1000) return 1000;
-      const raw = maxAmt * 1.2;
-      const pow = Math.pow(10, Math.floor(Math.log10(raw)));
-      return Math.ceil(raw / pow) * pow;
+    /**
+     * 分层信息
+     * - fullLayers：已灌满的完整层数
+     * - progress：当前层内金额（0 ~ layerSize-1；刚好整除时为 0，进入下一层）
+     * - displayLevel：正在挑战的层号（从 1 起）
+     * - pct：层内水位 0~100
+     */
+    function layerInfo(amount, key) {
+      const S = JAR_META[key].layerSize;
+      const amt = Math.max(0, Number(amount) || 0);
+      const fullLayers = Math.floor(amt / S);
+      const progress = amt % S;
+      const displayLevel = fullLayers + 1;
+      const pct = (progress / S) * 100;
+      const remain = S - progress;
+      return { S, fullLayers, progress, displayLevel, pct, remain, amount: amt };
     }
 
     /** 每个罐的水位动画状态：避免整 DOM 重绘掐断过渡 */
     const levelAnim = {
-      /** @type {Record<string, number>} 当前展示的水位百分比 */
+      /** @type {Record<string, number>} 当前展示的水位百分比（层内） */
       displayPct: {},
-      /** @type {Record<string, number>} 目标百分比 */
-      targetPct: {},
       /** @type {Record<string, number>} 展示中的金额（数字滚动） */
       displayAmount: {},
+      /** @type {Record<string, number>} 展示中的层号 */
+      displayLevel: {},
       /** @type {Record<string, number>} rAF id */
       raf: {},
+      /** @type {Record<string, number>} 序列动画代数，用于取消过期队列 */
+      gen: {},
       /** 是否已构建过罐子骨架 */
       built: false,
-      /** 当前刻度上限（变化时才重绘刻度） */
-      lastMax: null,
+      /** @type {Record<string, number>} 各罐刻度层高（变化时才重绘刻度） */
+      lastScaleS: {},
     };
 
     const WAVE_SVG = `
@@ -778,99 +922,214 @@
       fillEl.classList.remove('rising', 'falling', 'sloshing');
       if (delta > 0) fillEl.classList.add('rising', 'sloshing');
       else if (delta < 0) fillEl.classList.add('falling', 'sloshing');
-      // 晃动结束后去掉 class，避免残留
       clearTimeout(fillEl._sloshTimer);
       fillEl._sloshTimer = setTimeout(() => {
         fillEl.classList.remove('sloshing', 'rising', 'falling');
       }, 900);
     }
 
-    /**
-     * 驱动单罐水位 + 金额数字的补间动画
-     * @param {string} key
-     * @param {number} toPct
-     * @param {number} toAmount
-     * @param {{ rising?: boolean, instant?: boolean }} opts
-     */
-    function animateJarLevel(key, toPct, toAmount, opts = {}) {
+    /** 更新层号徽章与「本层进度」文案 */
+    function updateLayerMeta(key, amount, { celebrate = false } = {}) {
       const card = jarsEl.querySelector(`.jar-card[data-key="${key}"]`);
       if (!card) return;
-      const fillEl = card.querySelector('.jar-fill');
-      const amountEl = card.querySelector('.jar-amount');
-      if (!fillEl || !amountEl) return;
-
-      const fromPct = levelAnim.displayPct[key] ?? 0;
-      const fromAmt = levelAnim.displayAmount[key] ?? 0;
-      levelAnim.targetPct[key] = toPct;
-
-      if (opts.instant || prefersReducedMotion() || (Math.abs(toPct - fromPct) < 0.05 && Math.abs(toAmount - fromAmt) < 0.01)) {
-        if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
-        levelAnim.displayPct[key] = toPct;
-        levelAnim.displayAmount[key] = toAmount;
-        fillEl.style.height = toPct + '%';
-        amountEl.textContent = formatMoney(toAmount);
-        return;
+      const info = layerInfo(amount, key);
+      const badge = card.querySelector('.jar-layer-badge');
+      const prog = card.querySelector('.jar-layer-progress');
+      if (badge) {
+        badge.textContent = `第 ${info.displayLevel} 层`;
+        if (celebrate) {
+          badge.classList.remove('level-up-pop');
+          void badge.offsetWidth;
+          badge.classList.add('level-up-pop');
+          clearTimeout(badge._popTimer);
+          badge._popTimer = setTimeout(() => badge.classList.remove('level-up-pop'), 700);
+        }
       }
-
-      const rising = opts.rising !== undefined ? opts.rising : toPct >= fromPct;
-      setFillClasses(fillEl, rising ? 1 : -1);
-      if (rising && toPct > fromPct) {
-        // 变化幅度越大气泡越多
-        spawnBubbles(key, Math.min(1.5, (toPct - fromPct) / 15));
+      if (prog) {
+        // 文案尽量短，避免窄卡（中间罐）把标题区撑换行
+        const p = Math.round(info.progress);
+        const r = Math.round(info.remain);
+        prog.textContent = `${p}/${info.S} · 差${r}`;
+        prog.title = `本层 ${p} / ${info.S}，还差 ${r}`;
       }
+      levelAnim.displayLevel[key] = info.displayLevel;
+    }
 
-      amountEl.classList.remove('pop');
-      // 强制重排再加 class，保证每次都能触发
-      void amountEl.offsetWidth;
-      amountEl.classList.add('pop');
+    /** 升级飘字提示 */
+    function showLevelUpToast(key, toLevel) {
+      const card = jarsEl.querySelector(`.jar-card[data-key="${key}"]`);
+      if (!card) return;
+      const visual = card.querySelector('.jar-visual');
+      if (!visual) return;
+      card.classList.add('leveling-up');
+      const toast = document.createElement('div');
+      toast.className = 'level-up-toast';
+      toast.textContent = `升级！第 ${toLevel} 层`;
+      visual.appendChild(toast);
+      setTimeout(() => toast.remove(), 1100);
+      setTimeout(() => card.classList.remove('leveling-up'), 1200);
+    }
 
-      if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
+    /**
+     * 单段水位 + 金额补间（不跨层逻辑）
+     * @returns {Promise<void>}
+     */
+    function tweenFill(key, toPct, toAmount, opts = {}) {
+      return new Promise((resolve) => {
+        const card = jarsEl.querySelector(`.jar-card[data-key="${key}"]`);
+        if (!card) return resolve();
+        const fillEl = card.querySelector('.jar-fill');
+        const amountEl = card.querySelector('.jar-amount');
+        if (!fillEl || !amountEl) return resolve();
 
-      // 上涨稍长并带过冲；下降更干脆
-      const duration = rising ? 900 : 750;
-      const ease = rising ? easeOutBack : easeInOutCubic;
-      const start = performance.now();
+        const fromPct = levelAnim.displayPct[key] ?? 0;
+        const fromAmt = levelAnim.displayAmount[key] ?? 0;
 
-      function frame(now) {
-        const t = Math.min(1, (now - start) / duration);
-        const e = ease(t);
-        // 过冲时高度可能略超 100，钳在 0~102 视觉上自然
-        let pct = fromPct + (toPct - fromPct) * e;
-        pct = Math.max(0, Math.min(102, pct));
-        const amt = fromAmt + (toAmount - fromAmt) * Math.min(1, e > 1 ? 1 : e);
-        // 数字用更稳的进度，避免过冲把金额显示成奇怪中间值
-        const amtE = easeInOutCubic(t);
-        const showAmt = fromAmt + (toAmount - fromAmt) * amtE;
-
-        levelAnim.displayPct[key] = pct;
-        levelAnim.displayAmount[key] = showAmt;
-        fillEl.style.height = pct + '%';
-        amountEl.textContent = formatMoney(showAmt);
-
-        if (t < 1) {
-          levelAnim.raf[key] = requestAnimationFrame(frame);
-        } else {
+        const finish = () => {
           levelAnim.displayPct[key] = toPct;
           levelAnim.displayAmount[key] = toAmount;
           fillEl.style.height = toPct + '%';
           amountEl.textContent = formatMoney(toAmount);
+          updateLayerMeta(key, toAmount, { celebrate: !!opts.celebrateMeta });
           levelAnim.raf[key] = 0;
-        }
-      }
+          resolve();
+        };
 
-      levelAnim.raf[key] = requestAnimationFrame(frame);
+        if (
+          opts.instant ||
+          prefersReducedMotion() ||
+          (Math.abs(toPct - fromPct) < 0.05 && Math.abs(toAmount - fromAmt) < 0.01)
+        ) {
+          if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
+          finish();
+          return;
+        }
+
+        const rising = opts.rising !== undefined ? opts.rising : toPct >= fromPct;
+        setFillClasses(fillEl, rising ? 1 : -1);
+        if (rising && toPct > fromPct) {
+          spawnBubbles(key, Math.min(1.5, (toPct - fromPct) / 15));
+        }
+
+        amountEl.classList.remove('pop');
+        void amountEl.offsetWidth;
+        amountEl.classList.add('pop');
+
+        if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
+
+        const duration = opts.duration || (rising ? 720 : 600);
+        const ease = rising ? easeOutBack : easeInOutCubic;
+        const start = performance.now();
+        const gen = levelAnim.gen[key];
+
+        function frame(now) {
+          // 被更新的序列取消
+          if (levelAnim.gen[key] !== gen) return resolve();
+          const t = Math.min(1, (now - start) / duration);
+          const e = ease(t);
+          let pct = fromPct + (toPct - fromPct) * e;
+          pct = Math.max(0, Math.min(102, pct));
+          const amtE = easeInOutCubic(t);
+          const showAmt = fromAmt + (toAmount - fromAmt) * amtE;
+
+          levelAnim.displayPct[key] = pct;
+          levelAnim.displayAmount[key] = showAmt;
+          fillEl.style.height = pct + '%';
+          amountEl.textContent = formatMoney(showAmt);
+          // 金额滚动时同步层内文案（层号在跨层时再 celebrate）
+          updateLayerMeta(key, showAmt);
+
+          if (t < 1) {
+            levelAnim.raf[key] = requestAnimationFrame(frame);
+          } else {
+            finish();
+          }
+        }
+
+        levelAnim.raf[key] = requestAnimationFrame(frame);
+      });
     }
 
-    function updateScaleMarks(max) {
-      if (levelAnim.lastMax === max) return;
-      levelAnim.lastMax = max;
-      const marks = [1, 0.75, 0.5, 0.25, 0].map((r) => ({
-        ratio: r,
-        label: Math.round(max * r),
-      }));
+    /**
+     * 驱动单罐到目标金额：跨层时灌满 → 升级 → 清空 → 再灌，形成关卡感
+     */
+    async function animateJarToAmount(key, toAmount, opts = {}) {
+      const S = JAR_META[key].layerSize;
+      const fromAmt = levelAnim.displayAmount[key] ?? 0;
+      const toInfo = layerInfo(toAmount, key);
+      const fromInfo = layerInfo(fromAmt, key);
+
+      // 取消该罐上一段序列
+      levelAnim.gen[key] = (levelAnim.gen[key] || 0) + 1;
+      const gen = levelAnim.gen[key];
+      if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
+
+      const alive = () => levelAnim.gen[key] === gen;
+
+      if (opts.instant || prefersReducedMotion()) {
+        await tweenFill(key, toInfo.pct, toAmount, { instant: true });
+        return;
+      }
+
+      // 同层内：直接补间（日常加减都走这里，激励最清晰）
+      if (fromInfo.fullLayers === toInfo.fullLayers) {
+        await tweenFill(key, toInfo.pct, toAmount, {
+          rising: toAmount >= fromAmt,
+          duration: toAmount >= fromAmt ? 800 : 650,
+        });
+        return;
+      }
+
+      const upLayers = toInfo.fullLayers - fromInfo.fullLayers;
+
+      // 跨层上涨
+      if (toAmount > fromAmt) {
+        // 初始化或年底大额：跨超过 3 层时不逐层播，避免动画过长
+        if (upLayers > 3) {
+          await tweenFill(key, toInfo.pct, toAmount, { rising: true, duration: 900 });
+          if (!alive()) return;
+          showLevelUpToast(key, toInfo.displayLevel);
+          updateLayerMeta(key, toAmount, { celebrate: true });
+          setStatus(`${JAR_META[key].short}连升 ${upLayers} 层 → 第 ${toInfo.displayLevel} 层`, 'ok');
+          return;
+        }
+
+        let cursorAmt = fromAmt;
+        while (alive() && layerInfo(cursorAmt, key).fullLayers < toInfo.fullLayers) {
+          const cur = layerInfo(cursorAmt, key);
+          const fullAmt = (cur.fullLayers + 1) * S;
+          await tweenFill(key, 100, fullAmt, { rising: true, duration: 480 });
+          if (!alive()) return;
+          const nextLevel = cur.fullLayers + 2;
+          showLevelUpToast(key, nextLevel);
+          updateLayerMeta(key, fullAmt, { celebrate: true });
+          levelAnim.displayPct[key] = 0;
+          const fillEl = jarsEl.querySelector(`.jar-card[data-key="${key}"] .jar-fill`);
+          if (fillEl) fillEl.style.height = '0%';
+          cursorAmt = fullAmt;
+          await new Promise((r) => setTimeout(r, 280));
+        }
+        if (!alive()) return;
+        await tweenFill(key, toInfo.pct, toAmount, { rising: true, duration: 700 });
+        return;
+      }
+
+      // 跨层下降：落到目标层内进度（多层时一次到位，不逐层播）
+      await tweenFill(key, toInfo.pct, toAmount, { rising: false, duration: 700 });
+    }
+
+    /** 各罐刻度固定为「本层层高」0~S */
+    function updateScaleMarks() {
       JAR_KEYS.forEach((key) => {
+        const S = JAR_META[key].layerSize;
+        if (levelAnim.lastScaleS[key] === S) return;
+        levelAnim.lastScaleS[key] = S;
         const scale = jarsEl.querySelector(`.jar-card[data-key="${key}"] .scale`);
         if (!scale) return;
+        const marks = [1, 0.75, 0.5, 0.25, 0].map((r) => ({
+          ratio: r,
+          label: Math.round(S * r),
+        }));
         scale.innerHTML = marks
           .map(
             (m) =>
@@ -885,6 +1144,7 @@
      */
     function buildJars() {
       jarsEl.innerHTML = JAR_KEYS.map((key) => {
+        const S = JAR_META[key].layerSize;
         const quickPlus = QUICK.map(
           (n) => `<button type="button" class="chip plus" data-act="delta" data-key="${key}" data-delta="${n}">+${n}</button>`
         ).join('');
@@ -895,7 +1155,13 @@
         return `
           <article class="jar-card" data-key="${key}">
             <div class="jar-title">
-              <h2>${JAR_META[key].name}</h2>
+              <div class="jar-title-left">
+                <h2>${JAR_META[key].name}</h2>
+                <div class="jar-layer">
+                  <span class="jar-layer-badge">第 1 层</span>
+                  <span class="jar-layer-progress" title="本层 0 / ${S}，还差 ${S}">0/${S} · 差${S}</span>
+                </div>
+              </div>
               <div class="jar-amount">¥0</div>
             </div>
             <div class="jar-body">
@@ -926,10 +1192,11 @@
       JAR_KEYS.forEach((key) => {
         levelAnim.displayPct[key] = 0;
         levelAnim.displayAmount[key] = 0;
-        levelAnim.targetPct[key] = 0;
+        levelAnim.displayLevel[key] = 1;
+        levelAnim.gen[key] = 0;
       });
       levelAnim.built = true;
-      levelAnim.lastMax = null;
+      levelAnim.lastScaleS = {};
     }
 
     /**
@@ -938,23 +1205,18 @@
      */
     function updateJars(opts = {}) {
       if (!levelAnim.built) buildJars();
+      updateScaleMarks();
 
-      const max = scaleMax(state);
-      updateScaleMarks(max);
-
-      const animateSet = opts.animateKeys
-        ? new Set(opts.animateKeys)
-        : null;
+      const animateSet = opts.animateKeys ? new Set(opts.animateKeys) : null;
 
       JAR_KEYS.forEach((key) => {
         const amount = Number(state.jars[key].amount) || 0;
-        const pct = Math.max(0, Math.min(100, (amount / max) * 100));
         const shouldAnimate = !opts.instant && (!animateSet || animateSet.has(key));
-        const prevAmt = levelAnim.displayAmount[key] ?? 0;
-        animateJarLevel(key, pct, amount, {
-          instant: !shouldAnimate,
-          rising: amount >= prevAmt,
-        });
+        if (shouldAnimate) {
+          animateJarToAmount(key, amount, { instant: false });
+        } else {
+          animateJarToAmount(key, amount, { instant: true });
+        }
       });
     }
 
@@ -963,9 +1225,28 @@
     }
 
     function renderLogs() {
-      const logs = [...(state.logs || [])].reverse().slice(0, 100);
+      // 同步 Tab 选中态
+      if (logTabsEl) {
+        logTabsEl.querySelectorAll('.log-tab').forEach((tab) => {
+          const on = tab.getAttribute('data-filter') === logFilter;
+          tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+      }
+
+      let logs = [...(state.logs || [])].reverse();
+      if (logFilter !== 'all') {
+        logs = logs.filter((log) => log.jar === logFilter);
+      }
+      logs = logs.slice(0, 100);
+
+      if (!(state.logs || []).length) {
+        logListEl.innerHTML =
+          '<li class="empty" style="display:block;border:none">暂无操作记录。加减金额后会显示在这里。</li>';
+        return;
+      }
       if (!logs.length) {
-        logListEl.innerHTML = '<li class="empty" style="display:block;border:none">暂无操作记录。加减金额后会显示在这里。</li>';
+        const name = JAR_META[logFilter]?.short || '该类';
+        logListEl.innerHTML = `<li class="empty" style="display:block;border:none">暂无「${escapeHtml(name)}」相关操作记录。</li>`;
         return;
       }
       logListEl.innerHTML = logs
@@ -1137,6 +1418,16 @@
       $('logs-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 
+    // 操作日志 Tab 筛选
+    logTabsEl.addEventListener('click', (e) => {
+      const tab = e.target.closest('.log-tab');
+      if (!tab) return;
+      const filter = tab.getAttribute('data-filter');
+      if (!filter || filter === logFilter) return;
+      logFilter = filter;
+      renderLogs();
+    });
+
     async function boot() {
       try {
         setStatus('加载中…');
@@ -1158,12 +1449,11 @@
         } else {
           setStatus('');
         }
-        // 首次进入：水位从 0 缓缓升到当前值，更有「灌水」感
+        // 首次进入：水位从 0 按分层规则升到当前层内进度
         const firstPaint = !levelAnim.built;
         if (firstPaint) {
           buildJars();
-          updateScaleMarks(scaleMax(state));
-          // 先定在 0，下一帧再动画到目标
+          updateScaleMarks();
           requestAnimationFrame(() => {
             renderJars({ animateKeys: JAR_KEYS.slice() });
             renderLogs();
