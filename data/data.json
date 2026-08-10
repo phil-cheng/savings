@@ -3,7 +3,7 @@
   "jars": {
     "consumption": {
       "name": "消费储蓄罐",
-      "amount": 10
+      "amount": 40
     },
     "love": {
       "name": "爱心储蓄罐",
@@ -16,66 +16,18 @@
   },
   "logs": [
     {
-      "id": "log_msnahg6o_23757",
-      "at": "2026-08-10T13:50:47.856Z",
+      "id": "log_msnbd53n_m773d",
+      "at": "2026-08-10T14:15:26.483Z",
       "jar": "consumption",
-      "delta": 20,
+      "delta": 40,
       "amountAfter": 40,
-      "note": ""
-    },
-    {
-      "id": "log_msnahiko_ddrch",
-      "at": "2026-08-10T13:50:50.952Z",
-      "jar": "consumption",
-      "delta": -20,
-      "amountAfter": 20,
-      "note": ""
-    },
-    {
-      "id": "log_msnajtwq_01ws7",
-      "at": "2026-08-10T13:52:38.954Z",
-      "jar": "consumption",
-      "delta": 20,
-      "amountAfter": 40,
-      "note": ""
-    },
-    {
-      "id": "log_msnaqq50_rhx4v",
-      "at": "2026-08-10T13:58:00.660Z",
-      "jar": "consumption",
-      "delta": 20,
-      "amountAfter": 60,
-      "note": ""
-    },
-    {
-      "id": "log_msnb4eot_m8v2n",
-      "at": "2026-08-10T14:08:39.005Z",
-      "jar": "consumption",
-      "delta": 10,
-      "amountAfter": 70,
-      "note": ""
-    },
-    {
-      "id": "log_msnb4m6q_hd86z",
-      "at": "2026-08-10T14:08:48.722Z",
-      "jar": "consumption",
-      "delta": -30,
-      "amountAfter": 40,
-      "note": ""
-    },
-    {
-      "id": "log_msnb4zht_5zpg1",
-      "at": "2026-08-10T14:09:05.969Z",
-      "jar": "consumption",
-      "delta": -30,
-      "amountAfter": 10,
       "note": ""
     }
   ],
   "weeklyRecords": [
     {
       "week": "2026-W32",
-      "consumption": 20,
+      "consumption": 40,
       "love": 0,
       "super": 0,
       "change": null,

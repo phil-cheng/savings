@@ -659,6 +659,57 @@
     }
     td.change-pos { color: var(--ok); font-weight: 700; }
     td.change-neg { color: var(--danger); font-weight: 700; }
+
+    /* 储蓄政策列表 */
+    .policy-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .policy-list li {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 14px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fffaf3;
+    }
+    .policy-num {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #fff;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .policy-list li:nth-child(2) .policy-num {
+      background: #c45c6a;
+    }
+    .policy-list li:nth-child(3) .policy-num {
+      background: #2f8f68;
+    }
+    .policy-body strong {
+      display: block;
+      font-size: 0.98rem;
+      margin-bottom: 4px;
+      color: var(--ink);
+    }
+    .policy-body p {
+      margin: 0;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -668,6 +719,7 @@
         <h1>三罐储蓄</h1>
       </div>
       <div class="header-actions">
+        <button type="button" class="btn" id="btn-policy">储蓄政策</button>
         <button type="button" class="btn" id="btn-logs-focus">操作日志</button>
         <button type="button" class="btn btn-primary" id="btn-weekly">每周记录</button>
       </div>
@@ -688,6 +740,38 @@
       <ul class="log-list" id="log-list"></ul>
     </section>
   </div>
+
+  <dialog id="policy-dialog" aria-labelledby="policy-title">
+    <div class="dialog-head">
+      <h2 id="policy-title">储蓄政策</h2>
+      <button type="button" class="btn btn-ghost" id="btn-close-policy">关闭</button>
+    </div>
+    <div class="dialog-body">
+      <ol class="policy-list">
+        <li>
+          <span class="policy-num" aria-hidden="true">1</span>
+          <div class="policy-body">
+            <strong>大额奖励</strong>
+            <p>一次性存入金额超过 100 元，可获得 10% 的一次性奖励。</p>
+          </div>
+        </li>
+        <li>
+          <span class="policy-num" aria-hidden="true">2</span>
+          <div class="policy-body">
+            <strong>月累计奖励</strong>
+            <p>月储蓄累计超过 200 元，可获得 10% 的一次性奖励（大额除外）。</p>
+          </div>
+        </li>
+        <li>
+          <span class="policy-num" aria-hidden="true">3</span>
+          <div class="policy-body">
+            <strong>超级存钱罐周结福利</strong>
+            <p>超级存钱罐享受周结福利：按照增长金额 1:1 补贴（大额资金除外）。</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </dialog>
 
   <dialog id="weekly-dialog" aria-labelledby="weekly-title">
     <div class="dialog-head">
@@ -744,6 +828,7 @@
     const weeklyDialog = $('weekly-dialog');
     const weeklyTbody = $('weekly-tbody');
     const weeklyEmpty = $('weekly-empty');
+    const policyDialog = $('policy-dialog');
 
     /**
      * 右侧轻量 Toast（不占页面高度）
@@ -1780,6 +1865,20 @@
         e.clientY <= rect.bottom;
       if (!inDialog) weeklyDialog.close();
     });
+
+    // 储蓄政策说明
+    $('btn-policy').addEventListener('click', () => policyDialog.showModal());
+    $('btn-close-policy').addEventListener('click', () => policyDialog.close());
+    policyDialog.addEventListener('click', (e) => {
+      const rect = policyDialog.getBoundingClientRect();
+      const inDialog =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+      if (!inDialog) policyDialog.close();
+    });
+
     $('btn-logs-focus').addEventListener('click', () => {
       $('logs-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
