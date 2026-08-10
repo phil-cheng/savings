@@ -191,6 +191,11 @@
       background: #ffe0b8;
       color: var(--accent);
     }
+    .jar-layer-badge.level-down-pop {
+      animation: level-badge-pop 0.65s cubic-bezier(0.34, 1.45, 0.64, 1);
+      background: #e4e9f0;
+      color: #4a5d73;
+    }
     @keyframes level-badge-pop {
       0% { transform: scale(1); }
       35% { transform: scale(1.15); }
@@ -203,17 +208,49 @@
       text-overflow: ellipsis;
       min-width: 0;
     }
-    /* 整罐升级闪烁 */
+    /* 整罐升级 / 降级闪烁 */
     .jar-card.leveling-up {
       box-shadow: 0 0 0 2px rgba(196, 92, 38, 0.35), var(--shadow);
     }
+    .jar-card.leveling-down {
+      box-shadow: 0 0 0 2px rgba(74, 93, 115, 0.35), var(--shadow);
+    }
     .jar-card.leveling-up .jar-tank {
       animation: tank-glow 0.55s ease-in-out 2;
+    }
+    .jar-card.leveling-down .jar-tank {
+      animation: tank-dim 0.55s ease-in-out 2;
     }
     @keyframes tank-glow {
       0%, 100% { filter: brightness(1); }
       50% { filter: brightness(1.12); }
     }
+    @keyframes tank-dim {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(0.88); }
+    }
+    .level-toast {
+      position: absolute;
+      left: 50%;
+      top: 42%;
+      transform: translate(-50%, -50%);
+      z-index: 5;
+      padding: 8px 14px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 700;
+      pointer-events: none;
+      white-space: nowrap;
+      animation: toast-float 1.15s ease-out forwards;
+    }
+    .level-toast.up {
+      background: rgba(44, 36, 22, 0.88);
+    }
+    .level-toast.down {
+      background: rgba(58, 72, 90, 0.92);
+    }
+    /* 兼容旧 class 名 */
     .level-up-toast {
       position: absolute;
       left: 50%;
@@ -404,9 +441,12 @@
       .jar-fill.sloshing .jar-wave { animation: none !important; }
       .jar-bubble { animation: none !important; display: none; }
       .jar-amount.pop { animation: none !important; }
-      .jar-layer-badge.level-up-pop { animation: none !important; }
-      .jar-card.leveling-up .jar-tank { animation: none !important; }
-      .level-up-toast { animation: none !important; opacity: 1; }
+      .jar-layer-badge.level-up-pop,
+      .jar-layer-badge.level-down-pop { animation: none !important; }
+      .jar-card.leveling-up .jar-tank,
+      .jar-card.leveling-down .jar-tank { animation: none !important; }
+      .level-up-toast,
+      .level-toast { animation: none !important; opacity: 1; }
     }
 
     .controls {
@@ -864,8 +904,10 @@
       displayAmount: {},
       /** @type {Record<string, number>} 展示中的层号 */
       displayLevel: {},
-      /** @type {Record<string, number>} rAF id */
+      /** @type {Record<string, number>} 水位 rAF id */
       raf: {},
+      /** @type {Record<string, number>} 金额滚动 rAF id（与水位分离） */
+      amountRaf: {},
       /** @type {Record<string, number>} 序列动画代数，用于取消过期队列 */
       gen: {},
       /** 是否已构建过罐子骨架 */
@@ -955,42 +997,135 @@
       levelAnim.displayLevel[key] = info.displayLevel;
     }
 
-    /** 升级飘字提示 */
-    function showLevelUpToast(key, toLevel) {
+    /**
+     * 升/降级飘字提示
+     * @param {'up'|'down'} kind
+     */
+    function showLevelToast(key, toLevel, kind = 'up', extraText = '') {
       const card = jarsEl.querySelector(`.jar-card[data-key="${key}"]`);
       if (!card) return;
       const visual = card.querySelector('.jar-visual');
       if (!visual) return;
-      card.classList.add('leveling-up');
+
+      const cardCls = kind === 'down' ? 'leveling-down' : 'leveling-up';
+      card.classList.remove('leveling-up', 'leveling-down');
+      card.classList.add(cardCls);
+
+      // 去掉残留 toast，避免连点叠一堆
+      visual.querySelectorAll('.level-toast, .level-up-toast').forEach((el) => el.remove());
+
       const toast = document.createElement('div');
-      toast.className = 'level-up-toast';
-      toast.textContent = `升级！第 ${toLevel} 层`;
+      toast.className = `level-toast ${kind}`;
+      if (kind === 'down') {
+        toast.textContent = extraText || `降级 · 第 ${toLevel} 层`;
+      } else {
+        toast.textContent = extraText || `升级！第 ${toLevel} 层`;
+      }
       visual.appendChild(toast);
-      setTimeout(() => toast.remove(), 1100);
-      setTimeout(() => card.classList.remove('leveling-up'), 1200);
+
+      // 徽章也闪一下，强化「层变了」
+      const badge = card.querySelector('.jar-layer-badge');
+      if (badge) {
+        badge.textContent = `第 ${toLevel} 层`;
+        badge.classList.remove('level-up-pop', 'level-down-pop');
+        void badge.offsetWidth;
+        badge.classList.add(kind === 'down' ? 'level-down-pop' : 'level-up-pop');
+        clearTimeout(badge._popTimer);
+        badge._popTimer = setTimeout(() => {
+          badge.classList.remove('level-up-pop', 'level-down-pop');
+        }, 700);
+      }
+
+      setTimeout(() => toast.remove(), 1200);
+      setTimeout(() => card.classList.remove(cardCls), 1300);
+    }
+
+    /** @deprecated 兼容旧调用 */
+    function showLevelUpToast(key, toLevel) {
+      showLevelToast(key, toLevel, 'up');
+    }
+
+    function showLevelDownToast(key, toLevel, extraText = '') {
+      showLevelToast(key, toLevel, 'down', extraText);
     }
 
     /**
-     * 单段水位 + 金额补间（不跨层逻辑）
+     * 金额独立累加/递减：始终从当前展示值单调滚到目标值
+     * 不跟跨层水位分段绑定，避免 500→1000 时数字乱跳
+     */
+    function tweenAmount(key, toAmount, opts = {}) {
+      return new Promise((resolve) => {
+        const card = jarsEl.querySelector(`.jar-card[data-key="${key}"]`);
+        if (!card) return resolve();
+        const amountEl = card.querySelector('.jar-amount');
+        if (!amountEl) return resolve();
+
+        const fromAmt = levelAnim.displayAmount[key] ?? 0;
+        const target = Number(toAmount) || 0;
+        const gen = levelAnim.gen[key];
+
+        const paint = (amt, { celebrate = false } = {}) => {
+          // 内部保留连续值便于接上下一次动画；展示用整数元，累加心智更清晰
+          levelAnim.displayAmount[key] = amt;
+          const shown = Math.round(amt);
+          amountEl.textContent = formatMoney(shown);
+          updateLayerMeta(key, shown, { celebrate });
+        };
+
+        if (opts.instant || prefersReducedMotion() || Math.abs(target - fromAmt) < 0.005) {
+          paint(target, { celebrate: !!opts.celebrateMeta });
+          return resolve();
+        }
+
+        amountEl.classList.remove('pop');
+        void amountEl.offsetWidth;
+        amountEl.classList.add('pop');
+
+        // 变化越大略久，封顶避免干等；线性插值 = 从 A 累加到 B 的心智
+        const delta = Math.abs(target - fromAmt);
+        const duration =
+          opts.duration ||
+          Math.min(1400, Math.max(550, 400 + delta * 1.2));
+        const start = performance.now();
+        const ease = (t) => t;
+
+        if (levelAnim.amountRaf[key]) cancelAnimationFrame(levelAnim.amountRaf[key]);
+
+        function frame(now) {
+          if (levelAnim.gen[key] !== gen) return resolve();
+          const t = Math.min(1, (now - start) / duration);
+          const showAmt = fromAmt + (target - fromAmt) * ease(t);
+          paint(showAmt);
+          if (t < 1) {
+            levelAnim.amountRaf[key] = requestAnimationFrame(frame);
+          } else {
+            paint(target, { celebrate: !!opts.celebrateMeta });
+            levelAnim.amountRaf[key] = 0;
+            resolve();
+          }
+        }
+
+        levelAnim.amountRaf[key] = requestAnimationFrame(frame);
+      });
+    }
+
+    /**
+     * 仅水位高度补间（不改金额数字）
      * @returns {Promise<void>}
      */
-    function tweenFill(key, toPct, toAmount, opts = {}) {
+    function tweenFillHeight(key, toPct, opts = {}) {
       return new Promise((resolve) => {
         const card = jarsEl.querySelector(`.jar-card[data-key="${key}"]`);
         if (!card) return resolve();
         const fillEl = card.querySelector('.jar-fill');
-        const amountEl = card.querySelector('.jar-amount');
-        if (!fillEl || !amountEl) return resolve();
+        if (!fillEl) return resolve();
 
         const fromPct = levelAnim.displayPct[key] ?? 0;
-        const fromAmt = levelAnim.displayAmount[key] ?? 0;
+        const gen = levelAnim.gen[key];
 
         const finish = () => {
           levelAnim.displayPct[key] = toPct;
-          levelAnim.displayAmount[key] = toAmount;
           fillEl.style.height = toPct + '%';
-          amountEl.textContent = formatMoney(toAmount);
-          updateLayerMeta(key, toAmount, { celebrate: !!opts.celebrateMeta });
           levelAnim.raf[key] = 0;
           resolve();
         };
@@ -998,7 +1133,7 @@
         if (
           opts.instant ||
           prefersReducedMotion() ||
-          (Math.abs(toPct - fromPct) < 0.05 && Math.abs(toAmount - fromAmt) < 0.01)
+          Math.abs(toPct - fromPct) < 0.05
         ) {
           if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
           finish();
@@ -1011,34 +1146,21 @@
           spawnBubbles(key, Math.min(1.5, (toPct - fromPct) / 15));
         }
 
-        amountEl.classList.remove('pop');
-        void amountEl.offsetWidth;
-        amountEl.classList.add('pop');
-
         if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
 
         const duration = opts.duration || (rising ? 720 : 600);
-        const ease = rising ? easeOutBack : easeInOutCubic;
+        // 水位可用轻微过冲；金额已拆走，互不影响
+        const ease = rising && toPct > fromPct ? easeOutBack : easeInOutCubic;
         const start = performance.now();
-        const gen = levelAnim.gen[key];
 
         function frame(now) {
-          // 被更新的序列取消
           if (levelAnim.gen[key] !== gen) return resolve();
           const t = Math.min(1, (now - start) / duration);
           const e = ease(t);
           let pct = fromPct + (toPct - fromPct) * e;
           pct = Math.max(0, Math.min(102, pct));
-          const amtE = easeInOutCubic(t);
-          const showAmt = fromAmt + (toAmount - fromAmt) * amtE;
-
           levelAnim.displayPct[key] = pct;
-          levelAnim.displayAmount[key] = showAmt;
           fillEl.style.height = pct + '%';
-          amountEl.textContent = formatMoney(showAmt);
-          // 金额滚动时同步层内文案（层号在跨层时再 celebrate）
-          updateLayerMeta(key, showAmt);
-
           if (t < 1) {
             levelAnim.raf[key] = requestAnimationFrame(frame);
           } else {
@@ -1051,42 +1173,64 @@
     }
 
     /**
-     * 驱动单罐到目标金额：跨层时灌满 → 升级 → 清空 → 再灌，形成关卡感
+     * 驱动单罐到目标金额：
+     * - 金额：始终从当前值单调滚到目标（累加心智）
+     * - 水位：同层直接动；跨层可灌满→升级→清空
      */
     async function animateJarToAmount(key, toAmount, opts = {}) {
       const S = JAR_META[key].layerSize;
       const fromAmt = levelAnim.displayAmount[key] ?? 0;
       const toInfo = layerInfo(toAmount, key);
       const fromInfo = layerInfo(fromAmt, key);
+      const risingAmt = toAmount >= fromAmt;
 
-      // 取消该罐上一段序列
+      // 取消该罐上一段序列（金额 + 水位）
       levelAnim.gen[key] = (levelAnim.gen[key] || 0) + 1;
       const gen = levelAnim.gen[key];
       if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
+      if (levelAnim.amountRaf[key]) cancelAnimationFrame(levelAnim.amountRaf[key]);
 
       const alive = () => levelAnim.gen[key] === gen;
 
       if (opts.instant || prefersReducedMotion()) {
-        await tweenFill(key, toInfo.pct, toAmount, { instant: true });
+        await Promise.all([
+          tweenAmount(key, toAmount, { instant: true }),
+          tweenFillHeight(key, toInfo.pct, { instant: true }),
+        ]);
         return;
       }
 
-      // 同层内：直接补间（日常加减都走这里，激励最清晰）
+      // 金额始终单独、单调滚动（与水位并行）
+      const amountDelta = Math.abs(toAmount - fromAmt);
+      const amountDuration = Math.min(1400, Math.max(550, 400 + amountDelta * 1.2));
+      const amountPromise = tweenAmount(key, toAmount, {
+        duration: amountDuration,
+        celebrateMeta: false,
+      });
+
+      // —— 水位：同层 ——
       if (fromInfo.fullLayers === toInfo.fullLayers) {
-        await tweenFill(key, toInfo.pct, toAmount, {
-          rising: toAmount >= fromAmt,
-          duration: toAmount >= fromAmt ? 800 : 650,
-        });
+        await Promise.all([
+          amountPromise,
+          tweenFillHeight(key, toInfo.pct, {
+            rising: risingAmt,
+            duration: risingAmt ? 800 : 650,
+          }),
+        ]);
+        if (alive()) updateLayerMeta(key, toAmount);
         return;
       }
 
       const upLayers = toInfo.fullLayers - fromInfo.fullLayers;
 
-      // 跨层上涨
+      // —— 水位：跨层上涨 ——
       if (toAmount > fromAmt) {
-        // 初始化或年底大额：跨超过 3 层时不逐层播，避免动画过长
+        // 跨层过多：水位一次落到目标层进度，金额仍单调累加
         if (upLayers > 3) {
-          await tweenFill(key, toInfo.pct, toAmount, { rising: true, duration: 900 });
+          await Promise.all([
+            amountPromise,
+            tweenFillHeight(key, toInfo.pct, { rising: true, duration: 900 }),
+          ]);
           if (!alive()) return;
           showLevelUpToast(key, toInfo.displayLevel);
           updateLayerMeta(key, toAmount, { celebrate: true });
@@ -1094,28 +1238,80 @@
           return;
         }
 
-        let cursorAmt = fromAmt;
-        while (alive() && layerInfo(cursorAmt, key).fullLayers < toInfo.fullLayers) {
-          const cur = layerInfo(cursorAmt, key);
-          const fullAmt = (cur.fullLayers + 1) * S;
-          await tweenFill(key, 100, fullAmt, { rising: true, duration: 480 });
+        // 逐层灌满（只动水位；金额在旁自己累加）
+        let cursorLayer = fromInfo.fullLayers;
+        const fillSeq = (async () => {
+          while (alive() && cursorLayer < toInfo.fullLayers) {
+            await tweenFillHeight(key, 100, { rising: true, duration: 480 });
+            if (!alive()) return;
+            const nextLevel = cursorLayer + 2;
+            showLevelUpToast(key, nextLevel);
+            const badgeEl = jarsEl.querySelector(`.jar-card[data-key="${key}"] .jar-layer-badge`);
+            if (badgeEl) {
+              badgeEl.textContent = `第 ${nextLevel} 层`;
+              badgeEl.classList.remove('level-up-pop');
+              void badgeEl.offsetWidth;
+              badgeEl.classList.add('level-up-pop');
+            }
+            levelAnim.displayPct[key] = 0;
+            const fillEl = jarsEl.querySelector(`.jar-card[data-key="${key}"] .jar-fill`);
+            if (fillEl) fillEl.style.height = '0%';
+            cursorLayer += 1;
+            await new Promise((r) => setTimeout(r, 220));
+          }
           if (!alive()) return;
-          const nextLevel = cur.fullLayers + 2;
-          showLevelUpToast(key, nextLevel);
-          updateLayerMeta(key, fullAmt, { celebrate: true });
-          levelAnim.displayPct[key] = 0;
-          const fillEl = jarsEl.querySelector(`.jar-card[data-key="${key}"] .jar-fill`);
-          if (fillEl) fillEl.style.height = '0%';
-          cursorAmt = fullAmt;
-          await new Promise((r) => setTimeout(r, 280));
-        }
-        if (!alive()) return;
-        await tweenFill(key, toInfo.pct, toAmount, { rising: true, duration: 700 });
+          await tweenFillHeight(key, toInfo.pct, { rising: true, duration: 700 });
+        })();
+
+        await Promise.all([amountPromise, fillSeq]);
+        if (alive()) updateLayerMeta(key, toAmount, { celebrate: upLayers > 0 });
         return;
       }
 
-      // 跨层下降：落到目标层内进度（多层时一次到位，不逐层播）
-      await tweenFill(key, toInfo.pct, toAmount, { rising: false, duration: 700 });
+      // —— 水位：跨层下降 ——
+      // 先抽干再灌到新层进度，并明确「降级」提示，避免水位变高却以为在涨
+      const downLayers = fromInfo.fullLayers - toInfo.fullLayers;
+      const fillDownSeq = (async () => {
+        // 1) 当前层水位抽到 0（若已接近空则很快结束）
+        if ((levelAnim.displayPct[key] ?? 0) > 1) {
+          await tweenFillHeight(key, 0, { rising: false, duration: 380 });
+          if (!alive()) return;
+        } else {
+          levelAnim.displayPct[key] = 0;
+          const fillEl = jarsEl.querySelector(`.jar-card[data-key="${key}"] .jar-fill`);
+          if (fillEl) fillEl.style.height = '0%';
+        }
+
+        // 2) 降级提示（说明层已变，后面水位升高是「新层里的量」）
+        if (downLayers > 3) {
+          showLevelDownToast(
+            key,
+            toInfo.displayLevel,
+            `连降 ${downLayers} 层 · 第 ${toInfo.displayLevel} 层`
+          );
+          setStatus(`${JAR_META[key].short}连降 ${downLayers} 层 → 第 ${toInfo.displayLevel} 层`);
+        } else if (downLayers === 1) {
+          showLevelDownToast(key, toInfo.displayLevel, `降级 · 第 ${toInfo.displayLevel} 层`);
+        } else {
+          showLevelDownToast(
+            key,
+            toInfo.displayLevel,
+            `降 ${downLayers} 层 · 第 ${toInfo.displayLevel} 层`
+          );
+        }
+
+        await new Promise((r) => setTimeout(r, prefersReducedMotion() ? 0 : 260));
+        if (!alive()) return;
+
+        // 3) 在新层从空灌到目标进度（可能比降级前更高，但已有文案解释）
+        await tweenFillHeight(key, toInfo.pct, {
+          rising: true,
+          duration: 650,
+        });
+      })();
+
+      await Promise.all([amountPromise, fillDownSeq]);
+      if (alive()) updateLayerMeta(key, toAmount, { celebrate: false });
     }
 
     /** 各罐刻度固定为「本层层高」0~S */
@@ -1194,6 +1390,8 @@
         levelAnim.displayAmount[key] = 0;
         levelAnim.displayLevel[key] = 1;
         levelAnim.gen[key] = 0;
+        levelAnim.raf[key] = 0;
+        levelAnim.amountRaf[key] = 0;
       });
       levelAnim.built = true;
       levelAnim.lastScaleS = {};
