@@ -1,5 +1,4 @@
-# 运行时数据（本机持久化，勿提交个人账目）
-/data/data.json
+# 运行时临时文件（data.json 纳入版本库作远程备份）
 /data/data.json.tmp
 /data/*.tmp
 
