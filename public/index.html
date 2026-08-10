@@ -733,9 +733,9 @@
       <h3>操作日志</h3>
       <div class="log-tabs" id="log-tabs" role="tablist" aria-label="按储蓄罐筛选日志">
         <button type="button" class="log-tab" role="tab" data-filter="all" aria-selected="true">全部</button>
-        <button type="button" class="log-tab" role="tab" data-filter="consumption" aria-selected="false">消费</button>
-        <button type="button" class="log-tab" role="tab" data-filter="love" aria-selected="false">爱心</button>
-        <button type="button" class="log-tab" role="tab" data-filter="super" aria-selected="false">超级</button>
+        <button type="button" class="log-tab" role="tab" data-filter="consumption" aria-selected="false">消费罐</button>
+        <button type="button" class="log-tab" role="tab" data-filter="love" aria-selected="false">爱心罐</button>
+        <button type="button" class="log-tab" role="tab" data-filter="super" aria-selected="false">超级罐</button>
       </div>
       <ul class="log-list" id="log-list"></ul>
     </section>
@@ -786,7 +786,9 @@
             <th>消费</th>
             <th>爱心</th>
             <th>超级存钱罐</th>
-            <th>变动</th>
+            <th>超级储蓄变动（比上周）</th>
+            <th>总额</th>
+            <th>总变动（比上周）</th>
             <th>结算日期</th>
           </tr>
         </thead>
@@ -808,9 +810,9 @@
     const JAR_KEYS = ['consumption', 'love', 'super'];
     /** layerSize：每层容量（元）。日常波动可见；大额只推高层数 */
     const JAR_META = {
-      consumption: { name: '消费储蓄罐', short: '消费', layerSize: 100 },
-      love: { name: '爱心储蓄罐', short: '爱心', layerSize: 100 },
-      super: { name: '超级存钱罐', short: '超级', layerSize: 100 },
+      consumption: { name: '消费储蓄罐', short: '消费罐', layerSize: 100 },
+      love: { name: '爱心储蓄罐', short: '爱心罐', layerSize: 100 },
+      super: { name: '超级存钱罐', short: '超级罐', layerSize: 100 },
     };
     const QUICK = [5, 10, 20, 30, 50];
 
@@ -987,6 +989,14 @@
       const exists = data.weeklyRecords.some((r) => r.week === week);
       if (exists) return { data, settled: false };
 
+      // 指定起始结算点（例如「从下周日开始」）：未到该时刻前不补历史周
+      if (data.weeklySettleFrom) {
+        const from = new Date(data.weeklySettleFrom);
+        if (!Number.isNaN(from.getTime()) && deadline < from) {
+          return { data, settled: false };
+        }
+      }
+
       // 若所有罐子仍是 0 且没有任何日志，跳过空结算，避免第一次打开就写空周
       const total = jarSum(data.jars);
       if (total === 0 && (!data.logs || data.logs.length === 0) && data.weeklyRecords.length === 0) {
@@ -998,13 +1008,17 @@
       const love = Number(data.jars.love.amount) || 0;
       const superAmt = Number(data.jars.super.amount) || 0;
       const thisSum = consumption + love + superAmt;
+      // 总变动（比上周）= 本周三项之和 − 上周三项之和
       const change = prev ? thisSum - recordSum(prev) : null;
+      // 超级储蓄变动（比上周）= 本周超级 − 上周超级
+      const superChange = prev ? superAmt - (Number(prev.super) || 0) : null;
 
       data.weeklyRecords.push({
         week,
         consumption,
         love,
         super: superAmt,
+        superChange,
         change,
         settledAt: deadline.toISOString(),
       });
@@ -1046,6 +1060,10 @@
       next.logs = Array.isArray(next.logs) ? next.logs : [];
       next.weeklyRecords = Array.isArray(next.weeklyRecords) ? next.weeklyRecords : [];
       next.achievements = Array.isArray(next.achievements) ? next.achievements : [];
+      // weeklySettleFrom 可选：ISO 时间，结算点早于此则跳过（用于「从下周日开始」）
+      if (next.weeklySettleFrom != null && next.weeklySettleFrom !== '') {
+        next.weeklySettleFrom = String(next.weeklySettleFrom);
+      }
       return next;
     }
 
@@ -1698,30 +1716,57 @@
         .join('');
     }
 
+    /** 变动单元格：+10 / -5 / 0 / — */
+    function formatChangeCell(value) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return { html: '—', cls: '' };
+      }
+      const c = Number(value);
+      const cls = c > 0 ? 'change-pos' : c < 0 ? 'change-neg' : '';
+      return { html: formatDelta(c), cls };
+    }
+
     function renderWeekly() {
-      const rows = [...(state.weeklyRecords || [])].reverse();
-      if (!rows.length) {
+      const chrono = [...(state.weeklyRecords || [])];
+      if (!chrono.length) {
         weeklyTbody.innerHTML = '';
         weeklyEmpty.hidden = false;
         return;
       }
       weeklyEmpty.hidden = true;
-      weeklyTbody.innerHTML = rows
+
+      // 先按时间正序补全 superChange / change（兼容旧数据），再倒序展示
+      const enriched = chrono.map((r, i) => {
+        const prev = i > 0 ? chrono[i - 1] : null;
+        let superChange = r.superChange;
+        if (superChange === null || superChange === undefined) {
+          superChange = prev
+            ? (Number(r.super) || 0) - (Number(prev.super) || 0)
+            : null;
+        }
+        let change = r.change;
+        if (change === null || change === undefined) {
+          change = prev ? recordSum(r) - recordSum(prev) : null;
+        }
+        return { ...r, superChange, change };
+      });
+
+      weeklyTbody.innerHTML = enriched
+        .slice()
+        .reverse()
         .map((r) => {
-          let changeHtml = '—';
-          let changeCls = '';
-          if (r.change !== null && r.change !== undefined) {
-            const c = Number(r.change);
-            changeCls = c > 0 ? 'change-pos' : c < 0 ? 'change-neg' : '';
-            changeHtml = formatDelta(c);
-          }
+          const superCell = formatChangeCell(r.superChange);
+          const totalCell = formatChangeCell(r.change);
+          const total = recordSum(r);
           return `
             <tr>
               <td>${escapeHtml(r.week)}</td>
               <td>${formatMoney(r.consumption)}</td>
               <td>${formatMoney(r.love)}</td>
               <td>${formatMoney(r.super)}</td>
-              <td class="${changeCls}">${changeHtml}</td>
+              <td class="${superCell.cls}">${superCell.html}</td>
+              <td>${formatMoney(total)}</td>
+              <td class="${totalCell.cls}">${totalCell.html}</td>
               <td>${formatDateTime(r.settledAt)}</td>
             </tr>
           `;
