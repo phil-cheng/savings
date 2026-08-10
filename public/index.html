@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>三罐储蓄</title>
+  <style>
+    :root {
+      --bg: #f4f1ea;
+      --card: #fffdf8;
+      --ink: #2c2416;
+      --muted: #7a6f5d;
+      --line: #e6dfd2;
+      --accent: #c45c26;
+      --ok: #2f6f4e;
+      --danger: #a33b2b;
+      --shadow: 0 12px 40px rgba(44, 36, 22, 0.08);
+      --radius: 20px;
+      --font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 80% 50% at 10% -10%, #ffe8c8 0%, transparent 50%),
+        radial-gradient(ellipse 60% 40% at 100% 0%, #dceee4 0%, transparent 45%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      letter-spacing: 0.04em;
+      font-weight: 700;
+    }
+
+    header p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: 999px;
+      transition: transform 0.12s ease, opacity 0.12s ease, background 0.12s ease;
+    }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn {
+      padding: 10px 16px;
+      background: var(--card);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      box-shadow: 0 2px 8px rgba(44, 36, 22, 0.04);
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+    .btn:hover { background: #fff; }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+    }
+    .btn-primary:hover { background: #b04f1f; }
+    .btn-ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--muted);
+    }
+
+    .status {
+      font-size: 0.82rem;
+      color: var(--muted);
+      min-height: 1.2em;
+      margin-bottom: 12px;
+    }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--danger); }
+
+    .jars {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 860px) {
+      .jars { grid-template-columns: 1fr; }
+      header { flex-direction: column; align-items: flex-start; }
+      .header-actions { width: 100%; justify-content: flex-start; }
+    }
+
+    .jar-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 18px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .jar-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .jar-title h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .jar-amount {
+      font-variant-numeric: tabular-nums;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .jar-body {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 14px;
+      align-items: stretch;
+      min-height: 260px;
+    }
+
+    /* 左侧刻度 */
+    .scale {
+      position: relative;
+      border-right: 2px solid #cfc4b0;
+      margin: 8px 0;
+      padding-right: 8px;
+    }
+    .scale-mark {
+      position: absolute;
+      right: 0;
+      transform: translateY(50%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .scale-mark::after {
+      content: "";
+      width: 8px;
+      height: 1px;
+      background: #cfc4b0;
+    }
+
+    /* 罐子视觉 */
+    .jar-visual {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      position: relative;
+    }
+    .jar-lid {
+      width: 58%;
+      height: 14px;
+      background: linear-gradient(180deg, #d9c8a8, #b89a72);
+      border-radius: 6px 6px 2px 2px;
+      z-index: 2;
+      box-shadow: 0 2px 0 rgba(0,0,0,0.06);
+    }
+    .jar-mouth {
+      width: 48%;
+      height: 10px;
+      background: #e8dcc8;
+      border-radius: 0 0 4px 4px;
+      margin-top: -2px;
+      z-index: 1;
+    }
+    .jar-tank {
+      width: 72%;
+      flex: 1;
+      min-height: 180px;
+      border: 3px solid rgba(120, 95, 60, 0.35);
+      border-top: none;
+      border-radius: 0 0 36px 36px;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.35), transparent 30%, transparent 70%, rgba(255,255,255,0.15)),
+        rgba(255, 252, 245, 0.7);
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 -8px 20px rgba(80, 60, 30, 0.05);
+    }
+    /* 水位：高度由 JS 缓动驱动；表面波纹持续漂动 */
+    .jar-fill {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 0%;
+      border-radius: 0 0 32px 32px;
+      will-change: height;
+      overflow: visible;
+    }
+    /* 液面高光 + 波浪（SVG 位移） */
+    .jar-wave {
+      position: absolute;
+      left: -20%;
+      right: -20%;
+      top: -10px;
+      height: 20px;
+      pointer-events: none;
+    }
+    .jar-wave svg {
+      display: block;
+      width: 200%;
+      height: 100%;
+      animation: wave-drift 2.8s linear infinite;
+    }
+    .jar-fill.rising .jar-wave svg {
+      animation-duration: 1.1s;
+    }
+    .jar-fill.falling .jar-wave svg {
+      animation-duration: 1.6s;
+    }
+    @keyframes wave-drift {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+    /* 注入/抽出时的水面晃动 */
+    .jar-fill.sloshing .jar-wave {
+      animation: wave-slosh 0.7s ease-in-out 2;
+    }
+    @keyframes wave-slosh {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      25% { transform: translateY(-3px) rotate(-1.2deg); }
+      75% { transform: translateY(2px) rotate(1deg); }
+    }
+    /* 气泡（加水时上浮） */
+    .jar-bubbles {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    .jar-bubble {
+      position: absolute;
+      bottom: 8%;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.55);
+      box-shadow: inset 0 0 2px rgba(255,255,255,0.8);
+      animation: bubble-rise var(--dur, 0.9s) ease-out forwards;
+      opacity: 0;
+    }
+    @keyframes bubble-rise {
+      0% { transform: translateY(0) scale(0.6); opacity: 0; }
+      15% { opacity: 0.85; }
+      100% { transform: translateY(-120px) scale(1.1); opacity: 0; }
+    }
+    .jar-card[data-key="consumption"] .jar-fill {
+      background: linear-gradient(180deg, #f0a35a 0%, #e07a2a 55%, #d9772f 100%);
+    }
+    .jar-card[data-key="love"] .jar-fill {
+      background: linear-gradient(180deg, #f08a9a 0%, #e05a70 55%, #d4546a 100%);
+    }
+    .jar-card[data-key="super"] .jar-fill {
+      background: linear-gradient(180deg, #6ec4a0 0%, #3fa87a 55%, #2f8f68 100%);
+    }
+    .jar-card[data-key="consumption"] .jar-wave path { fill: #f0a35a; }
+    .jar-card[data-key="love"] .jar-wave path { fill: #f08a9a; }
+    .jar-card[data-key="super"] .jar-wave path { fill: #6ec4a0; }
+    /* 金额数字变化时轻微弹一下 */
+    .jar-amount.pop {
+      animation: amount-pop 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+    @keyframes amount-pop {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.12); }
+      100% { transform: scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .jar-wave svg { animation: none !important; }
+      .jar-fill.sloshing .jar-wave { animation: none !important; }
+      .jar-bubble { animation: none !important; display: none; }
+      .jar-amount.pop { animation: none !important; }
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .quick-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      padding: 7px 11px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      background: #f7f1e6;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    .chip.plus { color: var(--ok); }
+    .chip.minus { color: var(--danger); }
+    .chip:hover { background: #efe6d6; }
+
+    .custom-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 6px;
+    }
+    .custom-row input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      background: #fff;
+      color: var(--ink);
+    }
+    .custom-row input:focus {
+      outline: 2px solid rgba(196, 92, 38, 0.25);
+      border-color: var(--accent);
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px 18px 8px;
+    }
+    .panel h3 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+
+    .log-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 320px;
+      overflow: auto;
+    }
+    .log-list li {
+      display: grid;
+      grid-template-columns: 140px 1fr auto;
+      gap: 10px;
+      padding: 10px 4px;
+      border-top: 1px solid var(--line);
+      font-size: 0.9rem;
+      align-items: center;
+    }
+    @media (max-width: 640px) {
+      .log-list li {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+    }
+    .log-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+    .log-delta.plus { color: var(--ok); font-weight: 700; }
+    .log-delta.minus { color: var(--danger); font-weight: 700; }
+    .empty {
+      color: var(--muted);
+      padding: 16px 4px 20px;
+      font-size: 0.92rem;
+    }
+
+    /* Dialog */
+    dialog {
+      border: none;
+      border-radius: 18px;
+      padding: 0;
+      width: min(920px, calc(100vw - 32px));
+      box-shadow: 0 24px 80px rgba(0,0,0,0.2);
+      background: var(--card);
+      color: var(--ink);
+    }
+    dialog::backdrop {
+      background: rgba(30, 24, 16, 0.45);
+      backdrop-filter: blur(2px);
+    }
+    .dialog-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .dialog-head h2 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+    .dialog-body {
+      padding: 12px 18px 18px;
+      overflow: auto;
+      max-height: min(70vh, 560px);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 10px 8px;
+      text-align: right;
+      border-bottom: 1px solid var(--line);
+      font-variant-numeric: tabular-nums;
+    }
+    th:first-child, td:first-child,
+    th:last-child, td:last-child { text-align: left; }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.82rem;
+      position: sticky;
+      top: 0;
+      background: var(--card);
+    }
+    td.change-pos { color: var(--ok); font-weight: 700; }
+    td.change-neg { color: var(--danger); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>三罐储蓄</h1>
+        <p>数据保存在本机服务 · 各设备操作实时回写</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="btn" id="btn-logs-focus">操作日志</button>
+        <button type="button" class="btn btn-primary" id="btn-weekly">每周记录</button>
+      </div>
+    </header>
+
+    <div class="status" id="status" aria-live="polite"></div>
+
+    <section class="jars" id="jars"></section>
+
+    <section class="panel" id="logs-panel">
+      <h3>操作日志</h3>
+      <ul class="log-list" id="log-list"></ul>
+    </section>
+  </div>
+
+  <dialog id="weekly-dialog" aria-labelledby="weekly-title">
+    <div class="dialog-head">
+      <h2 id="weekly-title">每周记录</h2>
+      <button type="button" class="btn btn-ghost" id="btn-close-weekly">关闭</button>
+    </div>
+    <div class="dialog-body">
+      <table>
+        <thead>
+          <tr>
+            <th>周次</th>
+            <th>消费</th>
+            <th>爱心</th>
+            <th>超级存钱罐</th>
+            <th>变动</th>
+            <th>结算日期</th>
+          </tr>
+        </thead>
+        <tbody id="weekly-tbody"></tbody>
+      </table>
+      <div class="empty" id="weekly-empty" hidden>暂无周结算记录。每周日 20:00 自动结算（打开页面时也会补算）。</div>
+    </div>
+  </dialog>
+
+  <script>
+    /**
+     * 三罐储蓄 - 前端逻辑（无框架）
+     * - 从本机 API 读写整份 data.json
+     * - 操作后立即 PUT 回写
+     * - 每周日 20:00（上海时区）结算；打开页面时补算
+     */
+
+    const JAR_KEYS = ['consumption', 'love', 'super'];
+    const JAR_META = {
+      consumption: { name: '消费储蓄罐', short: '消费' },
+      love: { name: '爱心储蓄罐', short: '爱心' },
+      super: { name: '超级存钱罐', short: '超级' },
+    };
+    const QUICK = [10, 50, 100, 500];
+
+    /** @type {any} */
+    let state = null;
+    let saving = false;
+
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $('status');
+    const jarsEl = $('jars');
+    const logListEl = $('log-list');
+    const weeklyDialog = $('weekly-dialog');
+    const weeklyTbody = $('weekly-tbody');
+    const weeklyEmpty = $('weekly-empty');
+
+    function setStatus(msg, type = '') {
+      statusEl.textContent = msg || '';
+      statusEl.className = 'status' + (type ? ' ' + type : '');
+    }
+
+    function formatMoney(n) {
+      const v = Number(n) || 0;
+      return '¥' + v.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+    }
+
+    function formatDelta(n) {
+      const v = Number(n) || 0;
+      if (v > 0) return '+' + v.toLocaleString('zh-CN');
+      return v.toLocaleString('zh-CN');
+    }
+
+    /** 上海时区下的 Date 部件 */
+    function partsInShanghai(date = new Date()) {
+      const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+        weekday: 'short',
+      });
+      const map = {};
+      for (const p of fmt.formatToParts(date)) {
+        if (p.type !== 'literal') map[p.type] = p.value;
+      }
+      return {
+        year: Number(map.year),
+        month: Number(map.month),
+        day: Number(map.day),
+        hour: Number(map.hour),
+        minute: Number(map.minute),
+        second: Number(map.second),
+        weekday: map.weekday, // Mon Tue ... Sun
+      };
+    }
+
+    /** 把上海日历时间转成 UTC Date（用于比较） */
+    function shanghaiToDate(y, m, d, h = 0, min = 0, s = 0) {
+      // 用 ISO 串 + 固定 +08:00 构造
+      const mm = String(m).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      const hh = String(h).padStart(2, '0');
+      const mi = String(min).padStart(2, '0');
+      const ss = String(s).padStart(2, '0');
+      return new Date(`${y}-${mm}-${dd}T${hh}:${mi}:${ss}+08:00`);
+    }
+
+    /** 给定上海日历日期，求该日是周几：0=周日 ... 6=周六 */
+    function shanghaiWeekday(y, m, d) {
+      const dt = shanghaiToDate(y, m, d, 12, 0, 0);
+      // 用 en-US 在上海时区拿 weekday 不可靠于 getDay，直接用 UTC 偏移后的 getUTCDay 也不准
+      // 这里用 formatToParts
+      const p = partsInShanghai(dt);
+      const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      return map[p.weekday];
+    }
+
+    function addDaysShanghai(y, m, d, delta) {
+      const base = shanghaiToDate(y, m, d, 12, 0, 0);
+      const next = new Date(base.getTime() + delta * 86400000);
+      const p = partsInShanghai(next);
+      return { year: p.year, month: p.month, day: p.day };
+    }
+
+    /**
+     * 找到「不晚于 now」的最近一个结算点（周日 20:00 上海）
+     */
+    function lastSettlementDeadline(now = new Date()) {
+      const p = partsInShanghai(now);
+      const wd = shanghaiWeekday(p.year, p.month, p.day); // 0 Sun
+      // 回到本周日
+      const sunday = addDaysShanghai(p.year, p.month, p.day, -wd);
+      let deadline = shanghaiToDate(sunday.year, sunday.month, sunday.day, 20, 0, 0);
+      if (now < deadline) {
+        // 还没到本周日 20:00，用上周日
+        const prev = addDaysShanghai(sunday.year, sunday.month, sunday.day, -7);
+        deadline = shanghaiToDate(prev.year, prev.month, prev.day, 20, 0, 0);
+      }
+      return deadline;
+    }
+
+    /** ISO 周次标签，如 2026-W32（按结算日所在 ISO 周） */
+    function isoWeekLabel(date) {
+      // 用上海日历构造 UTC 日期再算 ISO week
+      const p = partsInShanghai(date);
+      const utc = new Date(Date.UTC(p.year, p.month - 1, p.day));
+      // ISO week: 周四所在周
+      const dayNum = utc.getUTCDay() || 7;
+      utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+      const weekNo = Math.ceil((((utc - yearStart) / 86400000) + 1) / 7);
+      const weekYear = utc.getUTCFullYear();
+      return `${weekYear}-W${String(weekNo).padStart(2, '0')}`;
+    }
+
+    function jarSum(jars) {
+      return JAR_KEYS.reduce((s, k) => s + (Number(jars[k]?.amount) || 0), 0);
+    }
+
+    function recordSum(rec) {
+      return (Number(rec.consumption) || 0) + (Number(rec.love) || 0) + (Number(rec.super) || 0);
+    }
+
+    /**
+     * 补算周结算：若已过结算点且尚无对应周次记录，则追加一条快照
+     * 可一次补多周（理论上电脑关很久）——这里按「只补最近一个结算点」足够日常；
+     * 若中间缺周，用当前金额补最近一次即可（金额是累计值，历史中间周无法还原）
+     */
+    function ensureWeeklySettlement(data, now = new Date()) {
+      if (!data.weeklyRecords) data.weeklyRecords = [];
+
+      const deadline = lastSettlementDeadline(now);
+      // 若系统刚初始化且从未有过数据，且当前时间还没到「第一个有意义的结算」，
+      // 仍允许在到点后记录。
+      const week = isoWeekLabel(deadline);
+      const exists = data.weeklyRecords.some((r) => r.week === week);
+      if (exists) return { data, settled: false };
+
+      // 若所有罐子仍是 0 且没有任何日志，跳过空结算，避免第一次打开就写空周
+      const total = jarSum(data.jars);
+      if (total === 0 && (!data.logs || data.logs.length === 0) && data.weeklyRecords.length === 0) {
+        return { data, settled: false };
+      }
+
+      const prev = data.weeklyRecords[data.weeklyRecords.length - 1];
+      const consumption = Number(data.jars.consumption.amount) || 0;
+      const love = Number(data.jars.love.amount) || 0;
+      const superAmt = Number(data.jars.super.amount) || 0;
+      const thisSum = consumption + love + superAmt;
+      const change = prev ? thisSum - recordSum(prev) : null;
+
+      data.weeklyRecords.push({
+        week,
+        consumption,
+        love,
+        super: superAmt,
+        change,
+        settledAt: deadline.toISOString(),
+      });
+
+      return { data, settled: true, week };
+    }
+
+    async function loadData() {
+      const res = await fetch('/api/data', { cache: 'no-store' });
+      if (!res.ok) throw new Error('读取数据失败 HTTP ' + res.status);
+      return res.json();
+    }
+
+    async function saveData(data) {
+      const res = await fetch('/api/data', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || '保存失败');
+      }
+    }
+
+    function uid(prefix) {
+      return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+    }
+
+    /** 刻度上限：至少 1000，或当前最大金额向上取整到漂亮刻度 */
+    function scaleMax(data) {
+      const maxAmt = Math.max(0, ...JAR_KEYS.map((k) => Number(data.jars[k].amount) || 0));
+      if (maxAmt <= 1000) return 1000;
+      const raw = maxAmt * 1.2;
+      const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+      return Math.ceil(raw / pow) * pow;
+    }
+
+    /** 每个罐的水位动画状态：避免整 DOM 重绘掐断过渡 */
+    const levelAnim = {
+      /** @type {Record<string, number>} 当前展示的水位百分比 */
+      displayPct: {},
+      /** @type {Record<string, number>} 目标百分比 */
+      targetPct: {},
+      /** @type {Record<string, number>} 展示中的金额（数字滚动） */
+      displayAmount: {},
+      /** @type {Record<string, number>} rAF id */
+      raf: {},
+      /** 是否已构建过罐子骨架 */
+      built: false,
+      /** 当前刻度上限（变化时才重绘刻度） */
+      lastMax: null,
+    };
+
+    const WAVE_SVG = `
+      <div class="jar-wave" aria-hidden="true">
+        <svg viewBox="0 0 240 20" preserveAspectRatio="none">
+          <path d="M0 10 Q15 0 30 10 T60 10 T90 10 T120 10 T150 10 T180 10 T210 10 T240 10 V20 H0 Z"/>
+        </svg>
+      </div>
+      <div class="jar-bubbles"></div>
+    `;
+
+    function prefersReducedMotion() {
+      return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    /** easeOutBack：略微过冲，像水涌到目标再回落 */
+    function easeOutBack(t) {
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+
+    /** easeInOutCubic：下降时更稳 */
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function spawnBubbles(key, intensity) {
+      const card = jarsEl.querySelector(`.jar-card[data-key="${key}"]`);
+      if (!card) return;
+      const host = card.querySelector('.jar-bubbles');
+      if (!host) return;
+      const n = Math.min(10, Math.max(3, Math.round(intensity * 6)));
+      for (let i = 0; i < n; i++) {
+        const b = document.createElement('span');
+        b.className = 'jar-bubble';
+        b.style.left = 12 + Math.random() * 76 + '%';
+        b.style.width = b.style.height = 5 + Math.random() * 7 + 'px';
+        b.style.setProperty('--dur', 0.65 + Math.random() * 0.55 + 's');
+        b.style.animationDelay = Math.random() * 0.2 + 's';
+        host.appendChild(b);
+        setTimeout(() => b.remove(), 1400);
+      }
+    }
+
+    function setFillClasses(fillEl, delta) {
+      if (!fillEl) return;
+      fillEl.classList.remove('rising', 'falling', 'sloshing');
+      if (delta > 0) fillEl.classList.add('rising', 'sloshing');
+      else if (delta < 0) fillEl.classList.add('falling', 'sloshing');
+      // 晃动结束后去掉 class，避免残留
+      clearTimeout(fillEl._sloshTimer);
+      fillEl._sloshTimer = setTimeout(() => {
+        fillEl.classList.remove('sloshing', 'rising', 'falling');
+      }, 900);
+    }
+
+    /**
+     * 驱动单罐水位 + 金额数字的补间动画
+     * @param {string} key
+     * @param {number} toPct
+     * @param {number} toAmount
+     * @param {{ rising?: boolean, instant?: boolean }} opts
+     */
+    function animateJarLevel(key, toPct, toAmount, opts = {}) {
+      const card = jarsEl.querySelector(`.jar-card[data-key="${key}"]`);
+      if (!card) return;
+      const fillEl = card.querySelector('.jar-fill');
+      const amountEl = card.querySelector('.jar-amount');
+      if (!fillEl || !amountEl) return;
+
+      const fromPct = levelAnim.displayPct[key] ?? 0;
+      const fromAmt = levelAnim.displayAmount[key] ?? 0;
+      levelAnim.targetPct[key] = toPct;
+
+      if (opts.instant || prefersReducedMotion() || (Math.abs(toPct - fromPct) < 0.05 && Math.abs(toAmount - fromAmt) < 0.01)) {
+        if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
+        levelAnim.displayPct[key] = toPct;
+        levelAnim.displayAmount[key] = toAmount;
+        fillEl.style.height = toPct + '%';
+        amountEl.textContent = formatMoney(toAmount);
+        return;
+      }
+
+      const rising = opts.rising !== undefined ? opts.rising : toPct >= fromPct;
+      setFillClasses(fillEl, rising ? 1 : -1);
+      if (rising && toPct > fromPct) {
+        // 变化幅度越大气泡越多
+        spawnBubbles(key, Math.min(1.5, (toPct - fromPct) / 15));
+      }
+
+      amountEl.classList.remove('pop');
+      // 强制重排再加 class，保证每次都能触发
+      void amountEl.offsetWidth;
+      amountEl.classList.add('pop');
+
+      if (levelAnim.raf[key]) cancelAnimationFrame(levelAnim.raf[key]);
+
+      // 上涨稍长并带过冲；下降更干脆
+      const duration = rising ? 900 : 750;
+      const ease = rising ? easeOutBack : easeInOutCubic;
+      const start = performance.now();
+
+      function frame(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const e = ease(t);
+        // 过冲时高度可能略超 100，钳在 0~102 视觉上自然
+        let pct = fromPct + (toPct - fromPct) * e;
+        pct = Math.max(0, Math.min(102, pct));
+        const amt = fromAmt + (toAmount - fromAmt) * Math.min(1, e > 1 ? 1 : e);
+        // 数字用更稳的进度，避免过冲把金额显示成奇怪中间值
+        const amtE = easeInOutCubic(t);
+        const showAmt = fromAmt + (toAmount - fromAmt) * amtE;
+
+        levelAnim.displayPct[key] = pct;
+        levelAnim.displayAmount[key] = showAmt;
+        fillEl.style.height = pct + '%';
+        amountEl.textContent = formatMoney(showAmt);
+
+        if (t < 1) {
+          levelAnim.raf[key] = requestAnimationFrame(frame);
+        } else {
+          levelAnim.displayPct[key] = toPct;
+          levelAnim.displayAmount[key] = toAmount;
+          fillEl.style.height = toPct + '%';
+          amountEl.textContent = formatMoney(toAmount);
+          levelAnim.raf[key] = 0;
+        }
+      }
+
+      levelAnim.raf[key] = requestAnimationFrame(frame);
+    }
+
+    function updateScaleMarks(max) {
+      if (levelAnim.lastMax === max) return;
+      levelAnim.lastMax = max;
+      const marks = [1, 0.75, 0.5, 0.25, 0].map((r) => ({
+        ratio: r,
+        label: Math.round(max * r),
+      }));
+      JAR_KEYS.forEach((key) => {
+        const scale = jarsEl.querySelector(`.jar-card[data-key="${key}"] .scale`);
+        if (!scale) return;
+        scale.innerHTML = marks
+          .map(
+            (m) =>
+              `<div class="scale-mark" style="bottom:${m.ratio * 100}%">${m.label.toLocaleString('zh-CN')}</div>`
+          )
+          .join('');
+      });
+    }
+
+    /**
+     * 首次构建罐子 DOM（只做一次，保留节点才能做水位补间）
+     */
+    function buildJars() {
+      jarsEl.innerHTML = JAR_KEYS.map((key) => {
+        const quickPlus = QUICK.map(
+          (n) => `<button type="button" class="chip plus" data-act="delta" data-key="${key}" data-delta="${n}">+${n}</button>`
+        ).join('');
+        const quickMinus = QUICK.map(
+          (n) => `<button type="button" class="chip minus" data-act="delta" data-key="${key}" data-delta="${-n}">-${n}</button>`
+        ).join('');
+
+        return `
+          <article class="jar-card" data-key="${key}">
+            <div class="jar-title">
+              <h2>${JAR_META[key].name}</h2>
+              <div class="jar-amount">¥0</div>
+            </div>
+            <div class="jar-body">
+              <div class="scale"></div>
+              <div class="jar-visual">
+                <div class="jar-lid"></div>
+                <div class="jar-mouth"></div>
+                <div class="jar-tank" aria-hidden="true">
+                  <div class="jar-fill" style="height:0%">
+                    ${WAVE_SVG}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="controls">
+              <div class="quick-row">${quickPlus}</div>
+              <div class="quick-row">${quickMinus}</div>
+              <div class="custom-row">
+                <input type="number" min="0" step="1" placeholder="自定义金额" data-input="${key}" />
+                <button type="button" class="chip plus" data-act="custom" data-key="${key}" data-sign="1">加</button>
+                <button type="button" class="chip minus" data-act="custom" data-key="${key}" data-sign="-1">减</button>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
+
+      JAR_KEYS.forEach((key) => {
+        levelAnim.displayPct[key] = 0;
+        levelAnim.displayAmount[key] = 0;
+        levelAnim.targetPct[key] = 0;
+      });
+      levelAnim.built = true;
+      levelAnim.lastMax = null;
+    }
+
+    /**
+     * 根据 state 更新水位/金额/刻度
+     * @param {{ animateKeys?: string[], instant?: boolean }} opts
+     */
+    function updateJars(opts = {}) {
+      if (!levelAnim.built) buildJars();
+
+      const max = scaleMax(state);
+      updateScaleMarks(max);
+
+      const animateSet = opts.animateKeys
+        ? new Set(opts.animateKeys)
+        : null;
+
+      JAR_KEYS.forEach((key) => {
+        const amount = Number(state.jars[key].amount) || 0;
+        const pct = Math.max(0, Math.min(100, (amount / max) * 100));
+        const shouldAnimate = !opts.instant && (!animateSet || animateSet.has(key));
+        const prevAmt = levelAnim.displayAmount[key] ?? 0;
+        animateJarLevel(key, pct, amount, {
+          instant: !shouldAnimate,
+          rising: amount >= prevAmt,
+        });
+      });
+    }
+
+    function renderJars(opts = {}) {
+      updateJars(opts);
+    }
+
+    function renderLogs() {
+      const logs = [...(state.logs || [])].reverse().slice(0, 100);
+      if (!logs.length) {
+        logListEl.innerHTML = '<li class="empty" style="display:block;border:none">暂无操作记录。加减金额后会显示在这里。</li>';
+        return;
+      }
+      logListEl.innerHTML = logs
+        .map((log) => {
+          const name = JAR_META[log.jar]?.short || log.jar;
+          const delta = Number(log.delta) || 0;
+          const cls = delta >= 0 ? 'plus' : 'minus';
+          const time = formatDateTime(log.at);
+          return `
+            <li>
+              <span class="log-time">${time}</span>
+              <span>${name} → 余额 ${formatMoney(log.amountAfter)}${log.note ? ' · ' + escapeHtml(log.note) : ''}</span>
+              <span class="log-delta ${cls}">${formatDelta(delta)}</span>
+            </li>
+          `;
+        })
+        .join('');
+    }
+
+    function renderWeekly() {
+      const rows = [...(state.weeklyRecords || [])].reverse();
+      if (!rows.length) {
+        weeklyTbody.innerHTML = '';
+        weeklyEmpty.hidden = false;
+        return;
+      }
+      weeklyEmpty.hidden = true;
+      weeklyTbody.innerHTML = rows
+        .map((r) => {
+          let changeHtml = '—';
+          let changeCls = '';
+          if (r.change !== null && r.change !== undefined) {
+            const c = Number(r.change);
+            changeCls = c > 0 ? 'change-pos' : c < 0 ? 'change-neg' : '';
+            changeHtml = formatDelta(c);
+          }
+          return `
+            <tr>
+              <td>${escapeHtml(r.week)}</td>
+              <td>${formatMoney(r.consumption)}</td>
+              <td>${formatMoney(r.love)}</td>
+              <td>${formatMoney(r.super)}</td>
+              <td class="${changeCls}">${changeHtml}</td>
+              <td>${formatDateTime(r.settledAt)}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
+
+    function formatDateTime(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      return new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(d);
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderAll(opts = {}) {
+      // 默认全量刷新水位；操作单罐时传入 animateKeys 只动那一罐
+      renderJars(opts);
+      renderLogs();
+      renderWeekly();
+    }
+
+    async function applyDelta(key, delta, note = '') {
+      delta = Number(delta);
+      if (!Number.isFinite(delta) || delta === 0) {
+        setStatus('请输入非零金额', 'err');
+        return;
+      }
+      if (saving) return;
+
+      const jar = state.jars[key];
+      const before = Number(jar.amount) || 0;
+      const after = Math.round((before + delta) * 100) / 100;
+      if (after < 0) {
+        setStatus('余额不能为负', 'err');
+        return;
+      }
+
+      // 乐观更新
+      jar.amount = after;
+      state.logs = state.logs || [];
+      state.logs.push({
+        id: uid('log'),
+        at: new Date().toISOString(),
+        jar: key,
+        delta,
+        amountAfter: after,
+        note: note || '',
+      });
+
+      // 只动画当前罐的水位；日志立即刷新
+      renderJars({ animateKeys: [key] });
+      renderLogs();
+      saving = true;
+      setStatus('保存中…');
+      try {
+        await saveData(state);
+        setStatus('已保存到本机', 'ok');
+        setTimeout(() => {
+          if (statusEl.textContent === '已保存到本机') setStatus('');
+        }, 1500);
+      } catch (e) {
+        // 回滚并再播一遍水位动画
+        jar.amount = before;
+        state.logs.pop();
+        renderJars({ animateKeys: [key] });
+        renderLogs();
+        setStatus('保存失败：' + e.message, 'err');
+      } finally {
+        saving = false;
+      }
+    }
+
+    jarsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      const key = btn.getAttribute('data-key');
+      const act = btn.getAttribute('data-act');
+      if (act === 'delta') {
+        applyDelta(key, Number(btn.getAttribute('data-delta')));
+      } else if (act === 'custom') {
+        const input = jarsEl.querySelector(`input[data-input="${key}"]`);
+        const val = Number(input && input.value);
+        if (!Number.isFinite(val) || val <= 0) {
+          setStatus('请输入有效的自定义金额', 'err');
+          input && input.focus();
+          return;
+        }
+        const sign = Number(btn.getAttribute('data-sign')) || 1;
+        applyDelta(key, sign * val);
+        if (input) input.value = '';
+      }
+    });
+
+    $('btn-weekly').addEventListener('click', () => {
+      renderWeekly();
+      weeklyDialog.showModal();
+    });
+    $('btn-close-weekly').addEventListener('click', () => weeklyDialog.close());
+    weeklyDialog.addEventListener('click', (e) => {
+      // 点击遮罩关闭
+      const rect = weeklyDialog.getBoundingClientRect();
+      const inDialog =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+      if (!inDialog) weeklyDialog.close();
+    });
+    $('btn-logs-focus').addEventListener('click', () => {
+      $('logs-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    async function boot() {
+      try {
+        setStatus('加载中…');
+        state = await loadData();
+        // 规范化缺字段
+        state.logs = state.logs || [];
+        state.weeklyRecords = state.weeklyRecords || [];
+        state.achievements = state.achievements || [];
+        for (const k of JAR_KEYS) {
+          if (!state.jars[k]) {
+            state.jars[k] = { name: JAR_META[k].name, amount: 0 };
+          }
+        }
+
+        const { settled, week } = ensureWeeklySettlement(state);
+        if (settled) {
+          await saveData(state);
+          setStatus(`已补记周结算：${week}`, 'ok');
+        } else {
+          setStatus('');
+        }
+        // 首次进入：水位从 0 缓缓升到当前值，更有「灌水」感
+        const firstPaint = !levelAnim.built;
+        if (firstPaint) {
+          buildJars();
+          updateScaleMarks(scaleMax(state));
+          // 先定在 0，下一帧再动画到目标
+          requestAnimationFrame(() => {
+            renderJars({ animateKeys: JAR_KEYS.slice() });
+            renderLogs();
+            renderWeekly();
+          });
+        } else {
+          // 切回页面时同步数据，水位平滑过渡到最新值
+          renderAll({ animateKeys: JAR_KEYS.slice() });
+        }
+      } catch (e) {
+        setStatus('无法连接本机服务：' + e.message + '。请确认已执行 npm start', 'err');
+      }
+    }
+
+    // 页面重新可见时再检查一次结算 / 刷新数据
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') boot();
+    });
+
+    boot();
+  </script>
+</body>
+</html>

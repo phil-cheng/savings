@@ -1,0 +1,10 @@
+{
+  "name": "savings",
+  "version": "1.0.0",
+  "description": "三罐储蓄本机 Web 服务",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

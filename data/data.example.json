@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "jars": {
+    "consumption": { "name": "消费储蓄罐", "amount": 0 },
+    "love": { "name": "爱心储蓄罐", "amount": 0 },
+    "super": { "name": "超级存钱罐", "amount": 0 }
+  },
+  "logs": [],
+  "weeklyRecords": [],
+  "achievements": []
+}

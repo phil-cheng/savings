@@ -1,0 +1,12 @@
+# 运行时数据（本机持久化，勿提交个人账目）
+/data/data.json
+/data/data.json.tmp
+/data/*.tmp
+
+# 依赖与系统
+node_modules/
+.DS_Store
+
+# 本地截图/调试产物
+/screenshots/
+*.log
