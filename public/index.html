@@ -97,14 +97,55 @@
       color: var(--muted);
     }
 
-    .status {
-      font-size: 0.82rem;
-      color: var(--muted);
-      min-height: 1.2em;
-      margin-bottom: 12px;
+    /* 右侧轻提示，不占文档流，避免保存后撑高/塌缩 */
+    .toast-host {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      pointer-events: none;
+      max-width: min(320px, calc(100vw - 32px));
     }
-    .status.ok { color: var(--ok); }
-    .status.err { color: var(--danger); }
+    .toast {
+      pointer-events: none;
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      line-height: 1.35;
+      color: #fff;
+      background: rgba(44, 36, 22, 0.88);
+      box-shadow: 0 8px 28px rgba(44, 36, 22, 0.18);
+      transform: translateX(12px);
+      opacity: 0;
+      animation: toast-in 0.28s ease-out forwards;
+      word-break: break-word;
+    }
+    .toast.ok {
+      background: rgba(47, 111, 78, 0.92);
+    }
+    .toast.err {
+      background: rgba(163, 59, 43, 0.92);
+    }
+    .toast.out {
+      animation: toast-out 0.28s ease-in forwards;
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(16px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes toast-out {
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: 0; transform: translateX(12px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .toast { animation: none; opacity: 1; transform: none; }
+      .toast.out { opacity: 0; }
+    }
 
     .jars {
       display: grid;
@@ -625,7 +666,6 @@
     <header>
       <div>
         <h1>三罐储蓄</h1>
-        <p>数据保存在本机服务 · 水位按「层」显示（每层 100 元）</p>
       </div>
       <div class="header-actions">
         <button type="button" class="btn" id="btn-logs-focus">操作日志</button>
@@ -633,7 +673,7 @@
       </div>
     </header>
 
-    <div class="status" id="status" aria-live="polite"></div>
+    <div class="toast-host" id="toast-host" aria-live="polite" aria-relevant="additions"></div>
 
     <section class="jars" id="jars"></section>
 
@@ -697,7 +737,7 @@
     let logFilter = 'all';
 
     const $ = (id) => document.getElementById(id);
-    const statusEl = $('status');
+    const toastHost = $('toast-host');
     const jarsEl = $('jars');
     const logListEl = $('log-list');
     const logTabsEl = $('log-tabs');
@@ -705,9 +745,40 @@
     const weeklyTbody = $('weekly-tbody');
     const weeklyEmpty = $('weekly-empty');
 
+    /**
+     * 右侧轻量 Toast（不占页面高度）
+     * @param {string} msg
+     * @param {''|'ok'|'err'} type
+     * @param {number} [durationMs]
+     */
+    function showToast(msg, type = '', durationMs) {
+      if (!msg || !toastHost) return;
+      const el = document.createElement('div');
+      el.className = 'toast' + (type ? ' ' + type : '');
+      el.textContent = msg;
+      toastHost.appendChild(el);
+
+      // 成功提示更短；错误稍长
+      const ms =
+        durationMs != null
+          ? durationMs
+          : type === 'err'
+            ? 3200
+            : type === 'ok'
+              ? 1600
+              : 2200;
+
+      const remove = () => {
+        el.classList.add('out');
+        setTimeout(() => el.remove(), 300);
+      };
+      setTimeout(remove, ms);
+    }
+
+    /** 兼容旧调用：一律走右侧 toast，空字符串忽略（不再撑布局） */
     function setStatus(msg, type = '') {
-      statusEl.textContent = msg || '';
-      statusEl.className = 'status' + (type ? ' ' + type : '');
+      if (!msg) return;
+      showToast(msg, type);
     }
 
     function formatMoney(n) {
@@ -1557,20 +1628,16 @@
       renderJars({ animateKeys: [key] });
       renderLogs();
       saving = true;
-      setStatus('保存中…');
       try {
         await saveData(state);
-        setStatus('已保存到本机', 'ok');
-        setTimeout(() => {
-          if (statusEl.textContent === '已保存到本机') setStatus('');
-        }, 1500);
+        showToast('已保存', 'ok', 1400);
       } catch (e) {
         // 回滚并再播一遍水位动画
         jar.amount = before;
         state.logs.pop();
         renderJars({ animateKeys: [key] });
         renderLogs();
-        setStatus('保存失败：' + e.message, 'err');
+        showToast('保存失败：' + e.message, 'err');
       } finally {
         saving = false;
       }
@@ -1628,7 +1695,6 @@
 
     async function boot() {
       try {
-        setStatus('加载中…');
         state = await loadData();
         // 规范化缺字段
         state.logs = state.logs || [];
@@ -1643,9 +1709,7 @@
         const { settled, week } = ensureWeeklySettlement(state);
         if (settled) {
           await saveData(state);
-          setStatus(`已补记周结算：${week}`, 'ok');
-        } else {
-          setStatus('');
+          showToast(`已补记周结算：${week}`, 'ok', 2200);
         }
         // 首次进入：水位从 0 按分层规则升到当前层内进度
         const firstPaint = !levelAnim.built;
@@ -1662,7 +1726,7 @@
           renderAll({ animateKeys: JAR_KEYS.slice() });
         }
       } catch (e) {
-        setStatus('无法连接本机服务：' + e.message + '。请确认已执行 npm start', 'err');
+        showToast('无法连接本机服务，请确认已执行 npm start', 'err', 4000);
       }
     }
 
