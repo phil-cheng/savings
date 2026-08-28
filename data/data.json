@@ -1,9 +1,18 @@
 {
   "version": 1,
   "jars": {
-    "consumption": { "name": "消费储蓄罐", "amount": 40 },
-    "love": { "name": "爱心储蓄罐", "amount": 0 },
-    "super": { "name": "超级存钱罐", "amount": 0 }
+    "consumption": {
+      "name": "消费储蓄罐",
+      "amount": 40
+    },
+    "love": {
+      "name": "爱心储蓄罐",
+      "amount": 0
+    },
+    "super": {
+      "name": "超级存钱罐",
+      "amount": 0
+    }
   },
   "logs": [
     {
@@ -15,7 +24,25 @@
       "note": ""
     }
   ],
-  "weeklyRecords": [],
+  "weeklyRecords": [
+    {
+      "week": "2026-W32",
+      "consumption": 40,
+      "love": 0,
+      "super": 0,
+      "change": null,
+      "settledAt": "2026-08-09T12:00:00.000Z"
+    },
+    {
+      "week": "2026-W34",
+      "consumption": 40,
+      "love": 0,
+      "super": 0,
+      "superChange": 0,
+      "change": 0,
+      "settledAt": "2026-08-23T12:00:00.000Z"
+    }
+  ],
   "weeklySettleFrom": "2026-08-16T12:00:00.000Z",
   "achievements": []
 }
