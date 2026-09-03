@@ -710,6 +710,52 @@
       line-height: 1.55;
       color: var(--muted);
     }
+
+    /* 密码对话框 */
+    .form-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .form-stack label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.88rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .form-stack input {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: #fff;
+      color: var(--ink);
+    }
+    .form-stack input:focus {
+      outline: 2px solid rgba(196, 92, 38, 0.25);
+      border-color: var(--accent);
+    }
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .form-hint {
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .form-error {
+      margin: 0;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--danger);
+    }
   </style>
 </head>
 <body>
@@ -719,6 +765,7 @@
         <h1>三罐储蓄</h1>
       </div>
       <div class="header-actions">
+        <button type="button" class="btn" id="btn-password">修改密码</button>
         <button type="button" class="btn" id="btn-policy">储蓄政策</button>
         <button type="button" class="btn" id="btn-logs-focus">操作日志</button>
         <button type="button" class="btn btn-primary" id="btn-weekly">每周记录</button>
@@ -740,6 +787,52 @@
       <ul class="log-list" id="log-list"></ul>
     </section>
   </div>
+
+  <dialog id="unlock-dialog" aria-labelledby="unlock-title">
+    <div class="dialog-head">
+      <h2 id="unlock-title">验证密码</h2>
+      <button type="button" class="btn btn-ghost" id="btn-close-unlock">取消</button>
+    </div>
+    <div class="dialog-body">
+      <form class="form-stack" id="unlock-form">
+        <p class="form-hint">请输入密码以确认本次金额变更。</p>
+        <label>
+          密码
+          <input type="password" id="unlock-input" name="password" autocomplete="current-password" required />
+        </label>
+        <p class="form-error" id="unlock-error" hidden></p>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="unlock-submit">确认</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog id="password-dialog" aria-labelledby="password-title">
+    <div class="dialog-head">
+      <h2 id="password-title">修改密码</h2>
+      <button type="button" class="btn btn-ghost" id="btn-close-password">关闭</button>
+    </div>
+    <div class="dialog-body">
+      <form class="form-stack" id="password-form">
+        <label>
+          旧密码
+          <input type="password" id="pw-old" name="oldPassword" autocomplete="current-password" required />
+        </label>
+        <label>
+          新密码（至少 4 位）
+          <input type="password" id="pw-new" name="newPassword" autocomplete="new-password" required minlength="4" />
+        </label>
+        <label>
+          确认新密码
+          <input type="password" id="pw-new2" name="newPassword2" autocomplete="new-password" required minlength="4" />
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">保存新密码</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
 
   <dialog id="policy-dialog" aria-labelledby="policy-title">
     <div class="dialog-head">
@@ -831,6 +924,116 @@
     const weeklyTbody = $('weekly-tbody');
     const weeklyEmpty = $('weekly-empty');
     const policyDialog = $('policy-dialog');
+    const unlockDialog = $('unlock-dialog');
+    const passwordDialog = $('password-dialog');
+    const PW_SESSION_KEY = 'savings.password';
+
+    /** 本标签页已验证的密码（不写 data.json） */
+    let sessionPassword = sessionStorage.getItem(PW_SESSION_KEY) || '';
+
+    function setSessionPassword(pw) {
+      sessionPassword = pw || '';
+      if (sessionPassword) sessionStorage.setItem(PW_SESSION_KEY, sessionPassword);
+      else sessionStorage.removeItem(PW_SESSION_KEY);
+    }
+
+    function bindDialogBackdrop(dialog) {
+      dialog.addEventListener('click', (e) => {
+        const rect = dialog.getBoundingClientRect();
+        const inDialog =
+          e.clientX >= rect.left &&
+          e.clientX <= rect.right &&
+          e.clientY >= rect.top &&
+          e.clientY <= rect.bottom;
+        if (!inDialog) dialog.close();
+      });
+    }
+
+    async function verifyPasswordApi(password) {
+      const res = await fetch('/api/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      return res.ok;
+    }
+
+    /**
+     * 弹出验证框：密码正确才关闭并返回密码；错误则留在框内可重试；
+     * 用户点取消 / 点遮罩关闭则放弃本次操作。
+     */
+    function promptPassword() {
+      return new Promise((resolve) => {
+        const input = $('unlock-input');
+        const form = $('unlock-form');
+        const errEl = $('unlock-error');
+        const submitBtn = $('unlock-submit');
+        input.value = '';
+        errEl.hidden = true;
+        errEl.textContent = '';
+        let done = false;
+
+        const finish = (value) => {
+          if (done) return;
+          done = true;
+          form.removeEventListener('submit', onSubmit);
+          $('btn-close-unlock').removeEventListener('click', onCancel);
+          unlockDialog.removeEventListener('close', onNativeClose);
+          if (unlockDialog.open) unlockDialog.close();
+          resolve(value);
+        };
+
+        const onSubmit = async (e) => {
+          e.preventDefault();
+          const v = (input.value || '').trim();
+          if (!v) return;
+          submitBtn.disabled = true;
+          errEl.hidden = true;
+          try {
+            const ok = await verifyPasswordApi(v);
+            if (done) return;
+            if (ok) {
+              finish(v);
+              return;
+            }
+            errEl.textContent = '密码错误，请重试';
+            errEl.hidden = false;
+            input.select();
+            input.focus();
+          } catch (_) {
+            if (done) return;
+            errEl.textContent = '验证失败，请检查服务后重试';
+            errEl.hidden = false;
+          } finally {
+            submitBtn.disabled = false;
+          }
+        };
+
+        const onCancel = () => finish('');
+        const onNativeClose = () => finish('');
+        form.addEventListener('submit', onSubmit);
+        $('btn-close-unlock').addEventListener('click', onCancel);
+        unlockDialog.addEventListener('close', onNativeClose);
+        unlockDialog.showModal();
+        setTimeout(() => input.focus(), 50);
+      });
+    }
+
+    /** 修改金额前确保已验证密码 */
+    async function ensureUnlocked() {
+      if (sessionPassword) {
+        try {
+          if (await verifyPasswordApi(sessionPassword)) return sessionPassword;
+        } catch (_) {
+          /* 网络异常时走弹窗重试 */
+        }
+        setSessionPassword('');
+      }
+      const pw = await promptPassword();
+      if (!pw) return '';
+      setSessionPassword(pw);
+      return sessionPassword;
+    }
 
     /**
      * 右侧轻量 Toast（不占页面高度）
@@ -1035,9 +1238,17 @@
     async function saveData(data) {
       const res = await fetch('/api/data', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Savings-Password': sessionPassword || '',
+        },
         body: JSON.stringify(data),
       });
+      if (res.status === 401) {
+        setSessionPassword('');
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || '密码错误');
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || '保存失败');
@@ -1060,6 +1271,7 @@
       next.logs = Array.isArray(next.logs) ? next.logs : [];
       next.weeklyRecords = Array.isArray(next.weeklyRecords) ? next.weeklyRecords : [];
       next.achievements = Array.isArray(next.achievements) ? next.achievements : [];
+      delete next.passwordHash;
       // weeklySettleFrom 可选：ISO 时间，结算点早于此则跳过（用于「从下周日开始」）
       if (next.weeklySettleFrom != null && next.weeklySettleFrom !== '') {
         next.weeklySettleFrom = String(next.weeklySettleFrom);
@@ -1811,6 +2023,8 @@
         return;
       }
       if (saving) return;
+      const unlocked = await ensureUnlocked();
+      if (!unlocked) return;
       saving = true;
 
       // 操作前先拉服务端最新账本，避免 PC 用旧余额覆盖手机刚改的数据
@@ -1863,7 +2077,11 @@
         } catch (_) {
           /* ignore */
         }
-        showToast('保存失败：' + e.message, 'err');
+        if (e.message === '密码错误') {
+          showToast('密码错误，未保存', 'err');
+        } else {
+          showToast('保存失败：' + e.message, 'err');
+        }
       } finally {
         saving = false;
       }
@@ -1900,28 +2118,44 @@
       weeklyDialog.showModal();
     });
     $('btn-close-weekly').addEventListener('click', () => weeklyDialog.close());
-    weeklyDialog.addEventListener('click', (e) => {
-      // 点击遮罩关闭
-      const rect = weeklyDialog.getBoundingClientRect();
-      const inDialog =
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom;
-      if (!inDialog) weeklyDialog.close();
-    });
 
     // 储蓄政策说明
     $('btn-policy').addEventListener('click', () => policyDialog.showModal());
     $('btn-close-policy').addEventListener('click', () => policyDialog.close());
-    policyDialog.addEventListener('click', (e) => {
-      const rect = policyDialog.getBoundingClientRect();
-      const inDialog =
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom;
-      if (!inDialog) policyDialog.close();
+    bindDialogBackdrop(policyDialog);
+    bindDialogBackdrop(weeklyDialog);
+    bindDialogBackdrop(unlockDialog);
+    bindDialogBackdrop(passwordDialog);
+
+    $('btn-password').addEventListener('click', () => {
+      $('password-form').reset();
+      passwordDialog.showModal();
+      setTimeout(() => $('pw-old').focus(), 50);
+    });
+    $('btn-close-password').addEventListener('click', () => passwordDialog.close());
+    $('password-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const oldPassword = $('pw-old').value;
+      const newPassword = $('pw-new').value;
+      const newPassword2 = $('pw-new2').value;
+      if (newPassword !== newPassword2) {
+        showToast('两次新密码不一致', 'err');
+        return;
+      }
+      try {
+        const res = await fetch('/api/password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ oldPassword, newPassword }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || '修改失败');
+        setSessionPassword(newPassword);
+        passwordDialog.close();
+        showToast('密码已更新', 'ok');
+      } catch (err) {
+        showToast(err.message || '修改失败', 'err');
+      }
     });
 
     $('btn-logs-focus').addEventListener('click', () => {
@@ -1944,9 +2178,16 @@
         await syncFromServer({ forceRender: false, notifyIfChanged: !firstPaint });
 
         const { settled, week } = ensureWeeklySettlement(state);
-        if (settled) {
-          await saveData(state);
-          showToast(`已补记周结算：${week}`, 'ok', 2200);
+        // 写回结算需要密码；未解锁时仅在内存展示，等下次改金额时一并写入
+        if (settled && sessionPassword) {
+          try {
+            await saveData(state);
+            showToast(`已补记周结算：${week}`, 'ok', 2200);
+          } catch (e) {
+            if (e.message === '密码错误') setSessionPassword('');
+          }
+        } else if (settled && !sessionPassword) {
+          showToast(`已生成本周结算（验证密码后才会写入）`, '', 2200);
         }
 
         if (firstPaint) {

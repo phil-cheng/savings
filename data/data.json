@@ -41,8 +41,18 @@
       "superChange": 0,
       "change": 0,
       "settledAt": "2026-08-23T12:00:00.000Z"
+    },
+    {
+      "week": "2026-W35",
+      "consumption": 40,
+      "love": 0,
+      "super": 0,
+      "superChange": 0,
+      "change": 0,
+      "settledAt": "2026-08-30T12:00:00.000Z"
     }
   ],
   "weeklySettleFrom": "2026-08-16T12:00:00.000Z",
-  "achievements": []
+  "achievements": [],
+  "passwordHash": "d34a569ab7aaa54dacd715ae64953455d86b768846cd0085ef4e9e7471489b7b"
 }

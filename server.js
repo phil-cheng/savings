@@ -7,11 +7,18 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const DATA_FILE = path.join(ROOT, 'data', 'data.json');
+/** 初始密码；仅用于首次写入哈希，之后以 data.json 中的 passwordHash 为准 */
+const DEFAULT_PASSWORD = 'family';
+
+function hashPassword(pw) {
+  return crypto.createHash('sha256').update(String(pw), 'utf8').digest('hex');
+}
 
 /** 默认空数据结构 */
 function defaultData() {
@@ -25,6 +32,7 @@ function defaultData() {
     logs: [],
     weeklyRecords: [],
     achievements: [],
+    passwordHash: hashPassword(DEFAULT_PASSWORD),
   };
 }
 
@@ -40,14 +48,40 @@ function ensureDataFile() {
 function readData() {
   ensureDataFile();
   const raw = fs.readFileSync(DATA_FILE, 'utf8');
+  let data;
   try {
-    return JSON.parse(raw);
+    data = JSON.parse(raw);
   } catch {
     // 文件损坏时回退默认，避免服务挂掉
-    const data = defaultData();
+    data = defaultData();
     writeData(data);
     return data;
   }
+  // 旧数据没有密码时，写入初始密码 family 的哈希
+  if (!data.passwordHash) {
+    data.passwordHash = hashPassword(DEFAULT_PASSWORD);
+    writeData(data);
+  }
+  return data;
+}
+
+/** 给前端的数据：不含密码哈希 */
+function publicData(data) {
+  const copy = { ...data };
+  delete copy.passwordHash;
+  return copy;
+}
+
+function passwordFromRequest(req, bodyObj) {
+  const header = req.headers['x-savings-password'];
+  if (header != null && String(header) !== '') return String(header);
+  if (bodyObj && bodyObj.oldPassword != null) return String(bodyObj.oldPassword);
+  return '';
+}
+
+function verifyPassword(data, password) {
+  if (!password) return false;
+  return hashPassword(password) === data.passwordHash;
 }
 
 function writeData(data) {
@@ -110,15 +144,22 @@ const server = http.createServer(async (req, res) => {
   // ---------- API ----------
   if (pathname === '/api/data') {
     if (req.method === 'GET') {
-      return sendJson(res, 200, readData());
+      return sendJson(res, 200, publicData(readData()));
     }
     if (req.method === 'PUT') {
       try {
+        const current = readData();
         const raw = await readBody(req);
         const data = JSON.parse(raw);
+        const password = passwordFromRequest(req);
+        if (!verifyPassword(current, password)) {
+          return sendJson(res, 401, { error: '密码错误' });
+        }
         if (!isValidData(data)) {
           return sendJson(res, 400, { error: '数据结构不合法' });
         }
+        // 客户端不得改哈希；密码只能走 /api/password
+        data.passwordHash = current.passwordHash;
         writeData(data);
         return sendJson(res, 200, { ok: true });
       } catch (e) {
@@ -127,6 +168,52 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(405, { Allow: 'GET, PUT' });
     return res.end();
+  }
+
+  // 仅校验密码，不改数据（验证弹窗多次尝试用）
+  if (pathname === '/api/unlock') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { Allow: 'POST' });
+      return res.end();
+    }
+    try {
+      const current = readData();
+      const body = JSON.parse(await readBody(req) || '{}');
+      const password = String(body.password || '');
+      if (!verifyPassword(current, password)) {
+        return sendJson(res, 401, { error: '密码错误' });
+      }
+      return sendJson(res, 200, { ok: true });
+    } catch (e) {
+      return sendJson(res, 400, { error: '无法解析 JSON：' + (e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/password') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { Allow: 'POST' });
+      return res.end();
+    }
+    try {
+      const current = readData();
+      const body = JSON.parse(await readBody(req) || '{}');
+      const oldPassword = String(body.oldPassword || '');
+      const newPassword = String(body.newPassword || '');
+      if (!verifyPassword(current, oldPassword)) {
+        return sendJson(res, 401, { error: '旧密码错误' });
+      }
+      if (!newPassword.trim()) {
+        return sendJson(res, 400, { error: '新密码不能为空' });
+      }
+      if (newPassword.length < 4) {
+        return sendJson(res, 400, { error: '新密码至少 4 位' });
+      }
+      current.passwordHash = hashPassword(newPassword);
+      writeData(current);
+      return sendJson(res, 200, { ok: true });
+    } catch (e) {
+      return sendJson(res, 400, { error: '无法解析 JSON：' + (e.message || e) });
+    }
   }
 
   // ---------- 静态文件 ----------
