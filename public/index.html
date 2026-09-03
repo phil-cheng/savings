@@ -725,6 +725,9 @@
       color: var(--muted);
       font-weight: 600;
     }
+    .form-stack label[hidden] {
+      display: none !important;
+    }
     .form-stack input {
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -977,13 +980,14 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
       });
-      return res.ok;
+      if (!res.ok) return false;
+      const body = await res.json().catch(() => null);
+      return !!(body && body.ok === true);
     }
 
     /**
-     * 每次改金额都弹出确认框：填理由；密码正确才关闭。
-     * 本标签页已验证过则隐藏密码框，只需填理由。
-     * 密码错误不关窗，可重试；取消 / 点遮罩则放弃本次操作。
+     * 每次改金额都弹出确认框：必须输入密码并填理由。
+     * 只校验本次输入，不用缓存密码顶替；错误不关窗，可重试。
      * @returns {Promise<{ password: string, note: string }|null>}
      */
     function promptChangeConfirm() {
@@ -994,10 +998,9 @@
         const form = $('unlock-form');
         const errEl = $('unlock-error');
         const submitBtn = $('unlock-submit');
-        const needPassword = !sessionPassword;
 
-        wrap.hidden = !needPassword;
-        input.required = needPassword;
+        wrap.hidden = false;
+        input.required = true;
         input.value = '';
         reasonEl.value = '';
         errEl.hidden = true;
@@ -1016,8 +1019,7 @@
 
         const onSubmit = async (e) => {
           e.preventDefault();
-          const typed = (input.value || '').trim();
-          const password = needPassword ? typed : sessionPassword;
+          const password = (input.value || '').trim();
           const note = (reasonEl.value || '').trim();
           if (!password) {
             errEl.textContent = '请输入密码';
@@ -1036,8 +1038,6 @@
             }
             errEl.textContent = '密码错误，请重试';
             errEl.hidden = false;
-            wrap.hidden = false;
-            input.required = true;
             input.select();
             input.focus();
           } catch (_) {
@@ -1055,7 +1055,7 @@
         $('btn-close-unlock').addEventListener('click', onCancel);
         unlockDialog.addEventListener('close', onNativeClose);
         unlockDialog.showModal();
-        setTimeout(() => (needPassword ? input : reasonEl).focus(), 50);
+        setTimeout(() => input.focus(), 50);
       });
     }
 
