@@ -734,9 +734,27 @@
       background: #fff;
       color: var(--ink);
     }
-    .form-stack input:focus {
+    .form-stack input:focus,
+    .form-stack textarea:focus {
       outline: 2px solid rgba(196, 92, 38, 0.25);
       border-color: var(--accent);
+    }
+    .form-stack textarea {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: #fff;
+      color: var(--ink);
+      resize: vertical;
+      min-height: 72px;
+    }
+    .log-note {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.85rem;
     }
     .form-actions {
       display: flex;
@@ -795,10 +813,14 @@
     </div>
     <div class="dialog-body">
       <form class="form-stack" id="unlock-form">
-        <p class="form-hint">请输入密码以确认本次金额变更。</p>
-        <label>
+        <p class="form-hint">请确认本次金额变更。</p>
+        <label id="unlock-password-wrap">
           密码
-          <input type="password" id="unlock-input" name="password" autocomplete="current-password" required />
+          <input type="password" id="unlock-input" name="password" autocomplete="current-password" />
+        </label>
+        <label>
+          理由
+          <textarea id="unlock-reason" name="reason" rows="3" maxlength="200" placeholder="例如：做家务、主动收拾、正确坐姿"></textarea>
         </label>
         <p class="form-error" id="unlock-error" hidden></p>
         <div class="form-actions">
@@ -959,16 +981,25 @@
     }
 
     /**
-     * 弹出验证框：密码正确才关闭并返回密码；错误则留在框内可重试；
-     * 用户点取消 / 点遮罩关闭则放弃本次操作。
+     * 每次改金额都弹出确认框：填理由；密码正确才关闭。
+     * 本标签页已验证过则隐藏密码框，只需填理由。
+     * 密码错误不关窗，可重试；取消 / 点遮罩则放弃本次操作。
+     * @returns {Promise<{ password: string, note: string }|null>}
      */
-    function promptPassword() {
+    function promptChangeConfirm() {
       return new Promise((resolve) => {
         const input = $('unlock-input');
+        const reasonEl = $('unlock-reason');
+        const wrap = $('unlock-password-wrap');
         const form = $('unlock-form');
         const errEl = $('unlock-error');
         const submitBtn = $('unlock-submit');
+        const needPassword = !sessionPassword;
+
+        wrap.hidden = !needPassword;
+        input.required = needPassword;
         input.value = '';
+        reasonEl.value = '';
         errEl.hidden = true;
         errEl.textContent = '';
         let done = false;
@@ -985,19 +1016,28 @@
 
         const onSubmit = async (e) => {
           e.preventDefault();
-          const v = (input.value || '').trim();
-          if (!v) return;
+          const typed = (input.value || '').trim();
+          const password = needPassword ? typed : sessionPassword;
+          const note = (reasonEl.value || '').trim();
+          if (!password) {
+            errEl.textContent = '请输入密码';
+            errEl.hidden = false;
+            input.focus();
+            return;
+          }
           submitBtn.disabled = true;
           errEl.hidden = true;
           try {
-            const ok = await verifyPasswordApi(v);
+            const ok = await verifyPasswordApi(password);
             if (done) return;
             if (ok) {
-              finish(v);
+              finish({ password, note });
               return;
             }
             errEl.textContent = '密码错误，请重试';
             errEl.hidden = false;
+            wrap.hidden = false;
+            input.required = true;
             input.select();
             input.focus();
           } catch (_) {
@@ -1009,30 +1049,14 @@
           }
         };
 
-        const onCancel = () => finish('');
-        const onNativeClose = () => finish('');
+        const onCancel = () => finish(null);
+        const onNativeClose = () => finish(null);
         form.addEventListener('submit', onSubmit);
         $('btn-close-unlock').addEventListener('click', onCancel);
         unlockDialog.addEventListener('close', onNativeClose);
         unlockDialog.showModal();
-        setTimeout(() => input.focus(), 50);
+        setTimeout(() => (needPassword ? input : reasonEl).focus(), 50);
       });
-    }
-
-    /** 修改金额前确保已验证密码 */
-    async function ensureUnlocked() {
-      if (sessionPassword) {
-        try {
-          if (await verifyPasswordApi(sessionPassword)) return sessionPassword;
-        } catch (_) {
-          /* 网络异常时走弹窗重试 */
-        }
-        setSessionPassword('');
-      }
-      const pw = await promptPassword();
-      if (!pw) return '';
-      setSessionPassword(pw);
-      return sessionPassword;
     }
 
     /**
@@ -1920,7 +1944,7 @@
           return `
             <li>
               <span class="log-time">${time}</span>
-              <span>${name} → 余额 ${formatMoney(log.amountAfter)}${log.note ? ' · ' + escapeHtml(log.note) : ''}</span>
+              <span>${name} → 余额 ${formatMoney(log.amountAfter)}${log.note ? `<span class="log-note">${escapeHtml(log.note)}</span>` : ''}</span>
               <span class="log-delta ${cls}">${formatDelta(delta)}</span>
             </li>
           `;
@@ -2023,8 +2047,10 @@
         return;
       }
       if (saving) return;
-      const unlocked = await ensureUnlocked();
-      if (!unlocked) return;
+      const confirmed = await promptChangeConfirm();
+      if (!confirmed) return;
+      setSessionPassword(confirmed.password);
+      const reason = (confirmed.note || note || '').trim();
       saving = true;
 
       // 操作前先拉服务端最新账本，避免 PC 用旧余额覆盖手机刚改的数据
@@ -2061,7 +2087,7 @@
         jar: key,
         delta,
         amountAfter: after,
-        note: note || '',
+        note: reason,
       });
 
       renderJars({ animateKeys: [key] });
