@@ -189,6 +189,28 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // 恢复出厂：清空金额/日志/周记录，保留密码哈希
+  if (pathname === '/api/reset') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { Allow: 'POST' });
+      return res.end();
+    }
+    try {
+      const current = readData();
+      const body = JSON.parse(await readBody(req) || '{}');
+      const password = String(body.password || passwordFromRequest(req) || '');
+      if (!verifyPassword(current, password)) {
+        return sendJson(res, 401, { error: '密码错误' });
+      }
+      const fresh = defaultData();
+      fresh.passwordHash = current.passwordHash;
+      writeData(fresh);
+      return sendJson(res, 200, { ok: true, data: publicData(fresh) });
+    } catch (e) {
+      return sendJson(res, 400, { error: '无法解析 JSON：' + (e.message || e) });
+    }
+  }
+
   if (pathname === '/api/password') {
     if (req.method !== 'POST') {
       res.writeHead(405, { Allow: 'POST' });

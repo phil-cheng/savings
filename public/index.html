@@ -584,22 +584,37 @@
     }
     .log-list li {
       display: grid;
-      grid-template-columns: 140px 1fr auto;
-      gap: 10px;
-      padding: 10px 4px;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding: 12px 4px;
       border-top: 1px solid var(--line);
       font-size: 0.9rem;
       align-items: center;
     }
-    @media (max-width: 640px) {
-      .log-list li {
-        grid-template-columns: 1fr;
-        gap: 4px;
-      }
+    .log-main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
     }
-    .log-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.82rem; }
-    .log-delta.plus { color: var(--ok); font-weight: 700; }
-    .log-delta.minus { color: var(--danger); font-weight: 700; }
+    .log-action {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .log-delta.plus { color: var(--ok); }
+    .log-delta.minus { color: var(--danger); }
+    .log-time {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.78rem;
+    }
+    .log-after {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      text-align: right;
+    }
     .empty {
       color: var(--muted);
       padding: 16px 4px 20px;
@@ -786,6 +801,7 @@
         <h1>三罐储蓄</h1>
       </div>
       <div class="header-actions">
+        <button type="button" class="btn" id="btn-reset">恢复出厂数据</button>
         <button type="button" class="btn" id="btn-password">修改密码</button>
         <button type="button" class="btn" id="btn-policy">储蓄政策</button>
         <button type="button" class="btn" id="btn-logs-focus">操作日志</button>
@@ -816,12 +832,12 @@
     </div>
     <div class="dialog-body">
       <form class="form-stack" id="unlock-form">
-        <p class="form-hint">请确认本次金额变更。</p>
+        <p class="form-hint" id="unlock-hint">请确认本次金额变更。</p>
         <label id="unlock-password-wrap">
           密码
           <input type="password" id="unlock-input" name="password" autocomplete="current-password" />
         </label>
-        <label>
+        <label id="unlock-reason-wrap">
           理由
           <textarea id="unlock-reason" name="reason" rows="3" maxlength="200" placeholder="例如：做家务、主动收拾、正确坐姿"></textarea>
         </label>
@@ -963,14 +979,11 @@
     }
 
     function bindDialogBackdrop(dialog) {
+      // 只把点在 dialog 元素自身（即遮罩）当成关闭。
+      // 不能用坐标判断：键盘回车会合成 click，clientX/Y 常为 0，
+      // 会被误判成点了窗外，弹窗关掉且操作被取消。
       dialog.addEventListener('click', (e) => {
-        const rect = dialog.getBoundingClientRect();
-        const inDialog =
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom;
-        if (!inDialog) dialog.close();
+        if (e.target === dialog) dialog.close();
       });
     }
 
@@ -986,19 +999,24 @@
     }
 
     /**
-     * 每次改金额都弹出确认框：必须输入密码并填理由。
-     * 只校验本次输入，不用缓存密码顶替；错误不关窗，可重试。
+     * 密码确认框：必须输入本次密码，错误不关窗。
+     * @param {{ title?: string, hint?: string, showReason?: boolean }} [opts]
      * @returns {Promise<{ password: string, note: string }|null>}
      */
-    function promptChangeConfirm() {
+    function promptChangeConfirm(opts = {}) {
       return new Promise((resolve) => {
         const input = $('unlock-input');
         const reasonEl = $('unlock-reason');
+        const reasonWrap = $('unlock-reason-wrap');
         const wrap = $('unlock-password-wrap');
         const form = $('unlock-form');
         const errEl = $('unlock-error');
         const submitBtn = $('unlock-submit');
+        const showReason = opts.showReason !== false;
 
+        $('unlock-title').textContent = opts.title || '验证密码';
+        $('unlock-hint').textContent = opts.hint || '请确认本次金额变更。';
+        reasonWrap.hidden = !showReason;
         wrap.hidden = false;
         input.required = true;
         input.value = '';
@@ -1019,6 +1037,7 @@
 
         const onSubmit = async (e) => {
           e.preventDefault();
+          e.stopPropagation();
           const password = (input.value || '').trim();
           const note = (reasonEl.value || '').trim();
           if (!password) {
@@ -1940,12 +1959,19 @@
           const name = JAR_META[log.jar]?.short || log.jar;
           const delta = Number(log.delta) || 0;
           const cls = delta >= 0 ? 'plus' : 'minus';
+          const verb = delta >= 0 ? '存入' : '取出';
           const time = formatDateTime(log.at);
+          const noteHtml = log.note
+            ? `<span class="log-note">${escapeHtml(log.note)}</span>`
+            : '';
           return `
             <li>
-              <span class="log-time">${time}</span>
-              <span>${name} → 余额 ${formatMoney(log.amountAfter)}${log.note ? `<span class="log-note">${escapeHtml(log.note)}</span>` : ''}</span>
-              <span class="log-delta ${cls}">${formatDelta(delta)}</span>
+              <div class="log-main">
+                <span class="log-action">${escapeHtml(name)} ${verb} <span class="log-delta ${cls}">${formatDelta(delta)}</span></span>
+                ${noteHtml}
+                <span class="log-time">${time}</span>
+              </div>
+              <span class="log-after">余额 ${formatMoney(log.amountAfter)}</span>
             </li>
           `;
         })
@@ -2152,6 +2178,34 @@
     bindDialogBackdrop(weeklyDialog);
     bindDialogBackdrop(unlockDialog);
     bindDialogBackdrop(passwordDialog);
+
+    $('btn-reset').addEventListener('click', async () => {
+      const confirmed = await promptChangeConfirm({
+        title: '恢复出厂数据',
+        hint: '将清空三罐金额、操作日志和周记录，且不可撤销。家庭密码会保留。',
+        showReason: false,
+      });
+      if (!confirmed) return;
+      try {
+        const res = await fetch('/api/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: confirmed.password }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          showToast('密码错误，未恢复', 'err');
+          return;
+        }
+        if (!res.ok) throw new Error(body.error || '恢复失败');
+        setSessionPassword(confirmed.password);
+        await syncFromServer({ forceRender: true, notifyIfChanged: false });
+        renderAll({ instant: true });
+        showToast('已恢复出厂数据', 'ok');
+      } catch (e) {
+        showToast('恢复失败：' + (e.message || e), 'err');
+      }
+    });
 
     $('btn-password').addEventListener('click', () => {
       $('password-form').reset();
